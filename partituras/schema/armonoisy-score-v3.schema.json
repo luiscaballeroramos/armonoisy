@@ -1,0 +1,280 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:armonoisy:score:3.0.0",
+  "title": "Armonoisy compact score",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "title",
+    "source",
+    "instrument",
+    "keySignature",
+    "timeSignature",
+    "measures"
+  ],
+  "properties": {
+    "version": {
+      "const": 3
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file",
+        "rights",
+        "review"
+      ],
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "rights": {
+          "enum": [
+            "original",
+            "public-domain",
+            "user-asserted-public-domain",
+            "authorized",
+            "unknown"
+          ]
+        },
+        "review": {
+          "enum": [
+            "draft",
+            "needs-review",
+            "verified"
+          ]
+        }
+      }
+    },
+    "instrument": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "key"
+      ],
+      "properties": {
+        "type": {
+          "const": "diatonic-harmonica"
+        },
+        "key": {
+          "type": "string",
+          "pattern": "^[A-G](#|b)?$"
+        }
+      }
+    },
+    "keySignature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fifths",
+        "mode"
+      ],
+      "properties": {
+        "fifths": {
+          "type": "integer",
+          "minimum": -7,
+          "maximum": 7
+        },
+        "mode": {
+          "enum": [
+            "major",
+            "minor"
+          ]
+        }
+      }
+    },
+    "timeSignature": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*/(1|2|4|8|16|32)$"
+    },
+    "tempoBpm": {
+      "type": "number",
+      "minimum": 20,
+      "maximum": 300
+    },
+    "reviewNotes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "measures": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/measure"
+      }
+    }
+  },
+  "$defs": {
+    "measure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "number",
+        "events"
+      ],
+      "properties": {
+        "number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "chord": {
+          "type": "string",
+          "minLength": 1
+        },
+        "events": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/note"
+              },
+              {
+                "$ref": "#/$defs/rest"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "duration": {
+      "oneOf": [
+        {
+          "enum": [
+            "whole",
+            "dotted-half",
+            "half",
+            "dotted-quarter",
+            "quarter",
+            "dotted-eighth",
+            "eighth",
+            "16th",
+            "32nd",
+            "64th"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "figure",
+            "dots"
+          ],
+          "properties": {
+            "figure": {
+              "enum": [
+                "whole",
+                "half",
+                "quarter",
+                "eighth",
+                "16th",
+                "32nd",
+                "64th"
+              ]
+            },
+            "dots": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 3
+            }
+          }
+        }
+      ]
+    },
+    "note": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pitch",
+        "duration"
+      ],
+      "properties": {
+        "pitch": {
+          "type": "string",
+          "pattern": "^[A-G](#|b)?[0-9]$"
+        },
+        "duration": {
+          "$ref": "#/$defs/duration"
+        },
+        "tab": {
+          "type": "string",
+          "pattern": "^\\+?(10|[1-9])$"
+        },
+        "tuplet": {
+          "$ref": "#/$defs/tuplet"
+        },
+        "bendSemitones": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3
+        },
+        "tie": {
+          "enum": [
+            "start",
+            "stop"
+          ]
+        },
+        "slur": {
+          "enum": [
+            "start",
+            "stop"
+          ]
+        }
+      }
+    },
+    "rest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rest",
+        "duration"
+      ],
+      "properties": {
+        "rest": {
+          "const": true
+        },
+        "duration": {
+          "$ref": "#/$defs/duration"
+        },
+        "tuplet": {
+          "$ref": "#/$defs/tuplet"
+        }
+      }
+    },
+    "tuplet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "actual",
+        "normal",
+        "boundary"
+      ],
+      "properties": {
+        "actual": {
+          "type": "integer",
+          "minimum": 2
+        },
+        "normal": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "boundary": {
+          "enum": [
+            "start",
+            "continue",
+            "stop"
+          ]
+        }
+      }
+    }
+  }
+}

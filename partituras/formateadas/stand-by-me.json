@@ -1,0 +1,237 @@
+{
+  "version": 3,
+  "title": "Stand by Me",
+  "source": {
+    "file": "stand by me.png",
+    "rights": "authorized",
+    "review": "verified"
+  },
+  "instrument": {
+    "type": "diatonic-harmonica",
+    "key": "C"
+  },
+  "keySignature": {
+    "fifths": 0,
+    "mode": "major"
+  },
+  "timeSignature": "4/4",
+  "measures": [
+    {
+      "number": 1,
+      "events": [
+        { "rest": true, "duration": "half" },
+        { "rest": true, "duration": "quarter", "tuplet": { "actual": 3, "normal": 2, "boundary": "start" } },
+        { "pitch": "E5", "duration": "quarter", "tab": "+5", "tuplet": { "actual": 3, "normal": 2, "boundary": "continue" } },
+        { "pitch": "G5", "duration": "quarter", "tab": "+6", "tuplet": { "actual": 3, "normal": 2, "boundary": "stop" } }
+      ]
+    },
+    {
+      "number": 2,
+      "events": [
+        { "pitch": "A5", "duration": "dotted-half", "tab": "6" },
+        { "pitch": "E5", "duration": "eighth", "tab": "+5" },
+        { "pitch": "G5", "duration": "eighth", "tab": "+6", "tie": "start" }
+      ]
+    },
+    {
+      "number": 3,
+      "events": [
+        { "pitch": "G5", "duration": "half", "tab": "+6", "tie": "stop" },
+        { "rest": true, "duration": "half" }
+      ]
+    },
+    {
+      "number": 4,
+      "events": [
+        { "rest": true, "duration": "quarter", "tuplet": { "actual": 3, "normal": 2, "boundary": "start" } },
+        { "pitch": "C5", "duration": "quarter", "tab": "+4", "tuplet": { "actual": 3, "normal": 2, "boundary": "continue" } },
+        { "pitch": "D5", "duration": "quarter", "tab": "4", "tuplet": { "actual": 3, "normal": 2, "boundary": "stop" } },
+        { "pitch": "E5", "duration": "quarter", "tab": "+5", "tuplet": { "actual": 3, "normal": 2, "boundary": "start" } },
+        { "pitch": "D5", "duration": "quarter", "tab": "4", "tuplet": { "actual": 3, "normal": 2, "boundary": "continue" } },
+        { "pitch": "C5", "duration": "quarter", "tab": "+4", "tie": "start", "tuplet": { "actual": 3, "normal": 2, "boundary": "stop" } }
+      ]
+    },
+    {
+      "number": 5,
+      "events": [
+        { "pitch": "C5", "duration": "half", "tab": "+4", "tie": "stop" },
+        { "rest": true, "duration": "quarter", "tuplet": { "actual": 3, "normal": 2, "boundary": "start" } },
+        { "pitch": "C5", "duration": "quarter", "tab": "+4", "tuplet": { "actual": 3, "normal": 2, "boundary": "continue" } },
+        { "pitch": "D5", "duration": "quarter", "tab": "4", "tuplet": { "actual": 3, "normal": 2, "boundary": "stop" } }
+      ]
+    },
+    {
+      "number": 6,
+      "events": [
+        { "pitch": "E5", "duration": "quarter", "tab": "+5", "tuplet": { "actual": 3, "normal": 2, "boundary": "start" } },
+        { "pitch": "C5", "duration": "half", "tab": "+4", "tie": "start", "tuplet": { "actual": 3, "normal": 2, "boundary": "stop" } },
+        { "pitch": "C5", "duration": "half", "tab": "+4", "tie": "stop", "tuplet": { "actual": 3, "normal": 2, "boundary": "start" } },
+        { "pitch": "E5", "duration": "quarter", "tab": "+5", "tuplet": { "actual": 3, "normal": 2, "boundary": "stop" } }
+      ]
+    },
+    {
+      "number": 7,
+      "events": [
+        { "pitch": "E5", "duration": "quarter", "tab": "+5", "tuplet": { "actual": 3, "normal": 2, "boundary": "start" } },
+        { "pitch": "D5", "duration": "half", "tab": "4", "tie": "start", "tuplet": { "actual": 3, "normal": 2, "boundary": "stop" } },
+        { "pitch": "D5", "duration": "quarter", "tab": "4", "tie": "stop", "tuplet": { "actual": 3, "normal": 2, "boundary": "start" } },
+        { "pitch": "E5", "duration": "quarter", "tab": "+5", "tuplet": { "actual": 3, "normal": 2, "boundary": "continue" } },
+        { "pitch": "D5", "duration": "quarter", "tab": "4", "tuplet": { "actual": 3, "normal": 2, "boundary": "stop" } }
+      ]
+    },
+    {
+      "number": 8,
+      "events": [
+        { "pitch": "C5", "duration": "whole", "tab": "+4", "tie": "start" }
+      ]
+    },
+    {
+      "number": 9,
+      "events": [
+        { "pitch": "C5", "duration": "half", "tab": "+4", "tie": "stop" },
+        { "rest": true, "duration": "quarter", "tuplet": { "actual": 3, "normal": 2, "boundary": "start" } },
+        { "pitch": "E5", "duration": "quarter", "tab": "+5", "tuplet": { "actual": 3, "normal": 2, "boundary": "continue" } },
+        { "pitch": "G5", "duration": "quarter", "tab": "+6", "tuplet": { "actual": 3, "normal": 2, "boundary": "stop" } }
+      ]
+    },
+    {
+      "number": 10,
+      "events": [
+        { "pitch": "A5", "duration": "dotted-half", "tab": "6" },
+        { "pitch": "E5", "duration": "eighth", "tab": "+5" },
+        { "pitch": "G5", "duration": "eighth", "tab": "+6", "tie": "start" }
+      ]
+    },
+    {
+      "number": 11,
+      "events": [
+        { "pitch": "G5", "duration": "half", "tab": "+6", "tie": "stop" },
+        { "rest": true, "duration": "half" }
+      ]
+    },
+    {
+      "number": 12,
+      "events": [
+        { "rest": true, "duration": "quarter", "tuplet": { "actual": 3, "normal": 2, "boundary": "start" } },
+        { "pitch": "C5", "duration": "quarter", "tab": "+4", "tuplet": { "actual": 3, "normal": 2, "boundary": "continue" } },
+        { "pitch": "D5", "duration": "quarter", "tab": "4", "tuplet": { "actual": 3, "normal": 2, "boundary": "stop" } },
+        { "pitch": "E5", "duration": "quarter", "tab": "+5", "tuplet": { "actual": 3, "normal": 2, "boundary": "start" } },
+        { "pitch": "D5", "duration": "quarter", "tab": "4", "tuplet": { "actual": 3, "normal": 2, "boundary": "continue" } },
+        { "pitch": "C5", "duration": "quarter", "tab": "+4", "tie": "start", "tuplet": { "actual": 3, "normal": 2, "boundary": "stop" } }
+      ]
+    },
+    {
+      "number": 13,
+      "events": [
+        { "pitch": "C5", "duration": "half", "tab": "+4", "tie": "stop" },
+        { "rest": true, "duration": "quarter", "tuplet": { "actual": 3, "normal": 2, "boundary": "start" } },
+        { "pitch": "C5", "duration": "quarter", "tab": "+4", "tuplet": { "actual": 3, "normal": 2, "boundary": "continue" } },
+        { "pitch": "D5", "duration": "quarter", "tab": "4", "tuplet": { "actual": 3, "normal": 2, "boundary": "stop" } }
+      ]
+    },
+    {
+      "number": 14,
+      "events": [
+        { "pitch": "E5", "duration": "quarter", "tab": "+5", "tuplet": { "actual": 3, "normal": 2, "boundary": "start" } },
+        { "pitch": "C5", "duration": "half", "tab": "+4", "tie": "start", "tuplet": { "actual": 3, "normal": 2, "boundary": "stop" } },
+        { "pitch": "C5", "duration": "half", "tab": "+4", "tie": "stop", "tuplet": { "actual": 3, "normal": 2, "boundary": "start" } },
+        { "pitch": "E5", "duration": "quarter", "tab": "+5", "tuplet": { "actual": 3, "normal": 2, "boundary": "stop" } }
+      ]
+    },
+    {
+      "number": 15,
+      "events": [
+        { "pitch": "E5", "duration": "quarter", "tab": "+5", "tuplet": { "actual": 3, "normal": 2, "boundary": "start" } },
+        { "pitch": "D5", "duration": "half", "tab": "4", "tie": "start", "tuplet": { "actual": 3, "normal": 2, "boundary": "stop" } },
+        { "pitch": "D5", "duration": "quarter", "tab": "4", "tie": "stop", "tuplet": { "actual": 3, "normal": 2, "boundary": "start" } },
+        { "pitch": "E5", "duration": "quarter", "tab": "+5", "tuplet": { "actual": 3, "normal": 2, "boundary": "continue" } },
+        { "pitch": "D5", "duration": "quarter", "tab": "4", "tuplet": { "actual": 3, "normal": 2, "boundary": "stop" } }
+      ]
+    },
+    {
+      "number": 16,
+      "events": [
+        { "pitch": "C5", "duration": "whole", "tab": "+4", "tie": "start" }
+      ]
+    },
+    {
+      "number": 17,
+      "events": [
+        { "pitch": "C5", "duration": "half", "tab": "+4", "tie": "stop" },
+        { "pitch": "C5", "duration": "half", "tab": "+4", "tuplet": { "actual": 3, "normal": 2, "boundary": "start" } },
+        { "pitch": "G5", "duration": "quarter", "tab": "+6", "tuplet": { "actual": 3, "normal": 2, "boundary": "stop" } }
+      ]
+    },
+    {
+      "number": 18,
+      "events": [
+        { "pitch": "A5", "duration": "quarter", "tab": "6" },
+        { "pitch": "G5", "duration": "quarter", "tab": "+6" },
+        { "pitch": "C6", "duration": "quarter", "tab": "+7" },
+        { "pitch": "B5", "duration": "quarter", "tab": "7" }
+      ]
+    },
+    {
+      "number": 19,
+      "events": [
+        { "pitch": "A5", "duration": "half", "tab": "6", "tie": "start" },
+        { "pitch": "A5", "duration": "quarter", "tab": "6", "tie": "stop", "tuplet": { "actual": 3, "normal": 2, "boundary": "start" } },
+        { "pitch": "A5", "duration": "quarter", "tab": "6", "tuplet": { "actual": 3, "normal": 2, "boundary": "continue" } },
+        { "pitch": "G5", "duration": "quarter", "tab": "+6", "tie": "start", "tuplet": { "actual": 3, "normal": 2, "boundary": "stop" } }
+      ]
+    },
+    {
+      "number": 20,
+      "events": [
+        { "pitch": "G5", "duration": "half", "tab": "+6", "tie": "stop" },
+        { "pitch": "A5", "duration": "quarter", "tab": "6", "tuplet": { "actual": 3, "normal": 2, "boundary": "start" } },
+        { "pitch": "G5", "duration": "quarter", "tab": "+6", "tuplet": { "actual": 3, "normal": 2, "boundary": "continue" } },
+        { "pitch": "E5", "duration": "quarter", "tab": "+5", "tuplet": { "actual": 3, "normal": 2, "boundary": "stop" } }
+      ]
+    },
+    {
+      "number": 21,
+      "events": [
+        { "pitch": "C5", "duration": "half", "tab": "+4", "tie": "start" },
+        { "pitch": "C5", "duration": "quarter", "tab": "+4", "tie": "stop", "tuplet": { "actual": 3, "normal": 2, "boundary": "start" } },
+        { "pitch": "D5", "duration": "quarter", "tab": "4", "tuplet": { "actual": 3, "normal": 2, "boundary": "continue" } },
+        { "pitch": "C5", "duration": "quarter", "tab": "+4", "tie": "start", "tuplet": { "actual": 3, "normal": 2, "boundary": "stop" } }
+      ]
+    },
+    {
+      "number": 22,
+      "events": [
+        { "pitch": "C5", "duration": "half", "tab": "+4", "tie": "stop" },
+        { "pitch": "A5", "duration": "quarter", "tab": "6", "tuplet": { "actual": 3, "normal": 2, "boundary": "start" } },
+        { "pitch": "G5", "duration": "quarter", "tab": "+6", "tuplet": { "actual": 3, "normal": 2, "boundary": "continue" } },
+        { "pitch": "E5", "duration": "quarter", "tab": "+5", "tuplet": { "actual": 3, "normal": 2, "boundary": "stop" } }
+      ]
+    },
+    {
+      "number": 23,
+      "events": [
+        { "pitch": "C5", "duration": "whole", "tab": "+4" }
+      ]
+    },
+    {
+      "number": 24,
+      "events": [
+        { "rest": true, "duration": "eighth" },
+        { "pitch": "C5", "duration": "eighth", "tab": "+4" },
+        { "pitch": "E5", "duration": "eighth", "tab": "+5" },
+        { "pitch": "D5", "duration": "eighth", "tab": "4" },
+        { "pitch": "C5", "duration": "dotted-quarter", "tab": "+4" },
+        { "rest": true, "duration": "eighth" }
+      ]
+    },
+    {
+      "number": 25,
+      "events": [
+        { "rest": true, "duration": "eighth" },
+        { "pitch": "E5", "duration": "quarter", "tab": "+5" },
+        { "pitch": "D5", "duration": "quarter", "tab": "4" },
+        { "pitch": "C5", "duration": "dotted-quarter", "tab": "+4" }
+      ]
+    }
+  ]
+}

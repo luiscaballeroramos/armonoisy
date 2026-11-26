@@ -1,0 +1,380 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:armonoisy:score:1.0.0",
+  "title": "Armonoisy score",
+  "description": "Versioned score data with standard pitches and durations for later MusicXML conversion.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "formatVersion",
+    "id",
+    "metadata",
+    "instrument",
+    "key",
+    "timeSignature",
+    "measures"
+  ],
+  "properties": {
+    "formatVersion": {
+      "const": "1.0.0"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "title",
+        "origin",
+        "reviewStatus"
+      ],
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "composer": {
+          "type": "string"
+        },
+        "origin": {
+          "enum": [
+            "original",
+            "public-domain",
+            "authorized"
+          ]
+        },
+        "sourceReference": {
+          "type": "string"
+        },
+        "reviewStatus": {
+          "enum": [
+            "draft",
+            "needs-review",
+            "verified"
+          ]
+        }
+      }
+    },
+    "instrument": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "key"
+      ],
+      "properties": {
+        "type": {
+          "const": "diatonic-harmonica"
+        },
+        "key": {
+          "$ref": "#/$defs/pitchClass"
+        }
+      }
+    },
+    "key": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tonic",
+        "mode"
+      ],
+      "properties": {
+        "tonic": {
+          "$ref": "#/$defs/pitchClass"
+        },
+        "mode": {
+          "enum": [
+            "major",
+            "minor"
+          ]
+        }
+      }
+    },
+    "timeSignature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "numerator",
+        "denominator"
+      ],
+      "properties": {
+        "numerator": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32
+        },
+        "denominator": {
+          "enum": [
+            1,
+            2,
+            4,
+            8,
+            16,
+            32
+          ]
+        }
+      }
+    },
+    "tempo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bpm",
+        "beatUnit"
+      ],
+      "properties": {
+        "bpm": {
+          "type": "number",
+          "minimum": 20,
+          "maximum": 300
+        },
+        "beatUnit": {
+          "enum": [
+            "whole",
+            "half",
+            "quarter",
+            "eighth",
+            "sixteenth"
+          ]
+        }
+      }
+    },
+    "measures": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/measure"
+      }
+    }
+  },
+  "$defs": {
+    "pitchClass": {
+      "enum": [
+        "C",
+        "C#",
+        "Db",
+        "D",
+        "D#",
+        "Eb",
+        "E",
+        "F",
+        "F#",
+        "Gb",
+        "G",
+        "G#",
+        "Ab",
+        "A",
+        "A#",
+        "Bb",
+        "B"
+      ]
+    },
+    "positiveRational": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "numerator",
+        "denominator"
+      ],
+      "properties": {
+        "numerator": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "denominator": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "nonNegativeRational": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "numerator",
+        "denominator"
+      ],
+      "properties": {
+        "numerator": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "denominator": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "measure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "number",
+        "events"
+      ],
+      "properties": {
+        "number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "events": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/note"
+              },
+              {
+                "$ref": "#/$defs/rest"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "eventBase": {
+      "type": "object",
+      "required": [
+        "type",
+        "onsetQuarterLength",
+        "durationQuarterLength"
+      ],
+      "properties": {
+        "onsetQuarterLength": {
+          "$ref": "#/$defs/nonNegativeRational"
+        },
+        "durationQuarterLength": {
+          "$ref": "#/$defs/positiveRational"
+        }
+      }
+    },
+    "note": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/eventBase"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "onsetQuarterLength",
+            "durationQuarterLength",
+            "pitch",
+            "harmonicaTab"
+          ],
+          "properties": {
+            "type": {
+              "const": "note"
+            },
+            "onsetQuarterLength": {
+              "$ref": "#/$defs/nonNegativeRational"
+            },
+            "durationQuarterLength": {
+              "$ref": "#/$defs/positiveRational"
+            },
+            "pitch": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "step",
+                "alter",
+                "octave"
+              ],
+              "properties": {
+                "step": {
+                  "enum": [
+                    "C",
+                    "D",
+                    "E",
+                    "F",
+                    "G",
+                    "A",
+                    "B"
+                  ]
+                },
+                "alter": {
+                  "type": "integer",
+                  "minimum": -2,
+                  "maximum": 2
+                },
+                "octave": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9
+                }
+              }
+            },
+            "harmonicaTab": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "hole",
+                "airflow"
+              ],
+              "properties": {
+                "hole": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 10
+                },
+                "airflow": {
+                  "enum": [
+                    "blow",
+                    "draw"
+                  ]
+                },
+                "bendSemitones": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 3,
+                  "description": "Number of semitones lowered by the bend."
+                }
+              }
+            },
+            "ties": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "start",
+                  "stop"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    "rest": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/eventBase"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "onsetQuarterLength",
+            "durationQuarterLength"
+          ],
+          "properties": {
+            "type": {
+              "const": "rest"
+            },
+            "onsetQuarterLength": {
+              "$ref": "#/$defs/nonNegativeRational"
+            },
+            "durationQuarterLength": {
+              "$ref": "#/$defs/positiveRational"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

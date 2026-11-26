@@ -1,0 +1,197 @@
+{
+  "version": 3,
+  "title": "Noche de Paz",
+  "source": {
+    "file": "noche-de-paz-3-4.png",
+    "rights": "user-asserted-public-domain",
+    "review": "needs-review"
+  },
+  "instrument": {
+    "type": "diatonic-harmonica",
+    "key": "C"
+  },
+  "keySignature": {
+    "fifths": 0,
+    "mode": "major"
+  },
+  "timeSignature": "3/4",
+  "reviewNotes": [
+    "Transcripción manual: cotejar notas y ritmos con el original antes de usarla.",
+    "Se registra solo la melodía tradicional; se omiten los acordes de esta edición."
+  ],
+  "measures": [
+    {
+      "number": 1,
+      "events": [
+        { "pitch": "G5", "duration": "dotted-quarter", "tab": "+6" },
+        { "pitch": "A5", "duration": "eighth", "tab": "6" },
+        { "pitch": "G5", "duration": "quarter", "tab": "+6" }
+      ]
+    },
+    {
+      "number": 2,
+      "events": [
+        { "pitch": "E5", "duration": "dotted-half", "tab": "+5" }
+      ]
+    },
+    {
+      "number": 3,
+      "events": [
+        { "pitch": "G5", "duration": "dotted-quarter", "tab": "+6" },
+        { "pitch": "A5", "duration": "eighth", "tab": "6" },
+        { "pitch": "G5", "duration": "quarter", "tab": "+6" }
+      ]
+    },
+    {
+      "number": 4,
+      "events": [
+        { "pitch": "E5", "duration": "dotted-half", "tab": "+5" }
+      ]
+    },
+    {
+      "number": 5,
+      "events": [
+        { "pitch": "E6", "duration": "half", "tab": "+8" },
+        { "pitch": "D6", "duration": "quarter", "tab": "8" }
+      ]
+    },
+    {
+      "number": 6,
+      "events": [
+        { "pitch": "B5", "duration": "half", "tab": "7" },
+        { "pitch": "B5", "duration": "quarter", "tab": "7" }
+      ]
+    },
+    {
+      "number": 7,
+      "events": [
+        { "pitch": "C6", "duration": "half", "tab": "+7" },
+        { "pitch": "C6", "duration": "quarter", "tab": "+7" }
+      ]
+    },
+    {
+      "number": 8,
+      "events": [
+        { "pitch": "G5", "duration": "dotted-half", "tab": "+6" }
+      ]
+    },
+    {
+      "number": 9,
+      "events": [
+        { "pitch": "G5", "duration": "half", "tab": "+6" },
+        { "pitch": "A5", "duration": "eighth", "tab": "6" },
+        { "pitch": "A5", "duration": "eighth", "tab": "6" }
+      ]
+    },
+    {
+      "number": 10,
+      "events": [
+        { "pitch": "C6", "duration": "half", "tab": "+7" },
+        { "pitch": "B5", "duration": "eighth", "tab": "7" },
+        { "pitch": "A5", "duration": "eighth", "tab": "6" }
+      ]
+    },
+    {
+      "number": 11,
+      "events": [
+        { "pitch": "G5", "duration": "half", "tab": "+6" },
+        { "pitch": "A5", "duration": "eighth", "tab": "6" },
+        { "pitch": "G5", "duration": "eighth", "tab": "+6" }
+      ]
+    },
+    {
+      "number": 12,
+      "events": [
+        { "pitch": "E5", "duration": "dotted-half", "tab": "+5" }
+      ]
+    },
+    {
+      "number": 13,
+      "events": [
+        { "pitch": "G5", "duration": "half", "tab": "+6" },
+        { "pitch": "A5", "duration": "eighth", "tab": "6" },
+        { "pitch": "A5", "duration": "eighth", "tab": "6" }
+      ]
+    },
+    {
+      "number": 14,
+      "events": [
+        { "pitch": "C6", "duration": "half", "tab": "+7" },
+        { "pitch": "B5", "duration": "eighth", "tab": "7" },
+        { "pitch": "A5", "duration": "eighth", "tab": "6" }
+      ]
+    },
+    {
+      "number": 15,
+      "events": [
+        { "pitch": "G5", "duration": "half", "tab": "+6" },
+        { "pitch": "A5", "duration": "eighth", "tab": "6" },
+        { "pitch": "G5", "duration": "eighth", "tab": "+6" }
+      ]
+    },
+    {
+      "number": 16,
+      "events": [
+        { "pitch": "E5", "duration": "dotted-half", "tab": "+5" }
+      ]
+    },
+    {
+      "number": 17,
+      "events": [
+        { "pitch": "E6", "duration": "half", "tab": "+8" },
+        { "pitch": "D6", "duration": "eighth", "tab": "8" },
+        { "pitch": "D6", "duration": "eighth", "tab": "8" }
+      ]
+    },
+    {
+      "number": 18,
+      "events": [
+        { "pitch": "G6", "duration": "half", "tab": "+9" },
+        { "pitch": "D6", "duration": "eighth", "tab": "8" },
+        { "pitch": "B5", "duration": "eighth", "tab": "7" }
+      ]
+    },
+    {
+      "number": 19,
+      "events": [
+        { "pitch": "C6", "duration": "dotted-half", "tab": "+7" }
+      ]
+    },
+    {
+      "number": 20,
+      "events": [
+        { "pitch": "E6", "duration": "dotted-half", "tab": "+8" }
+      ]
+    },
+    {
+      "number": 21,
+      "events": [
+        { "pitch": "C6", "duration": "half", "tab": "+7" },
+        { "pitch": "G5", "duration": "eighth", "tab": "+6" },
+        { "pitch": "E5", "duration": "eighth", "tab": "+5" }
+      ]
+    },
+    {
+      "number": 22,
+      "events": [
+        { "pitch": "G5", "duration": "half", "tab": "+6" },
+        { "pitch": "F5", "duration": "eighth", "tab": "5" },
+        { "pitch": "D5", "duration": "eighth", "tab": "4" }
+      ]
+    },
+    {
+      "number": 23,
+      "events": [
+        { "pitch": "D5", "duration": "dotted-half", "tab": "4", "tie": "start" }
+      ]
+    },
+    {
+      "number": 24,
+      "events": [
+        { "pitch": "D5", "duration": "quarter", "tab": "4", "tie": "stop" },
+        { "rest": true, "duration": "quarter" },
+        { "rest": true, "duration": "quarter" }
+      ]
+    }
+  ]
+}

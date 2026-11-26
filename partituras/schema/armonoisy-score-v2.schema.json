@@ -1,0 +1,380 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:armonoisy:score:2.0.0",
+  "title": "Armonoisy score",
+  "description": "Compact, ordered score data designed for MusicXML export.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "title",
+    "source",
+    "instrument",
+    "keySignature",
+    "timeSignature",
+    "measures"
+  ],
+  "properties": {
+    "version": {
+      "const": 2
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file",
+        "rights",
+        "review"
+      ],
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "rights": {
+          "enum": [
+            "original",
+            "public-domain",
+            "authorized",
+            "unknown"
+          ]
+        },
+        "review": {
+          "enum": [
+            "draft",
+            "needs-review",
+            "verified"
+          ]
+        }
+      }
+    },
+    "instrument": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "const": "diatonic-harmonica"
+        },
+        "key": {
+          "$ref": "#/$defs/pitchClass"
+        }
+      }
+    },
+    "keySignature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tonic",
+        "mode"
+      ],
+      "properties": {
+        "tonic": {
+          "$ref": "#/$defs/pitchClass"
+        },
+        "mode": {
+          "enum": [
+            "major",
+            "minor"
+          ]
+        }
+      }
+    },
+    "timeSignature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "numerator",
+        "denominator"
+      ],
+      "properties": {
+        "numerator": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32
+        },
+        "denominator": {
+          "enum": [
+            1,
+            2,
+            4,
+            8,
+            16,
+            32
+          ]
+        }
+      }
+    },
+    "tempo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bpm",
+        "beatUnit"
+      ],
+      "properties": {
+        "bpm": {
+          "type": "number",
+          "minimum": 20,
+          "maximum": 300
+        },
+        "beatUnit": {
+          "enum": [
+            "whole",
+            "half",
+            "quarter",
+            "eighth",
+            "sixteenth"
+          ]
+        }
+      }
+    },
+    "measures": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/measure"
+      }
+    }
+  },
+  "$defs": {
+    "pitchClass": {
+      "enum": [
+        "C",
+        "C#",
+        "Db",
+        "D",
+        "D#",
+        "Eb",
+        "E",
+        "F",
+        "F#",
+        "Gb",
+        "G",
+        "G#",
+        "Ab",
+        "A",
+        "A#",
+        "Bb",
+        "B"
+      ]
+    },
+    "duration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "figure"
+      ],
+      "properties": {
+        "figure": {
+          "enum": [
+            "whole",
+            "half",
+            "quarter",
+            "eighth",
+            "16th",
+            "32nd",
+            "64th"
+          ]
+        },
+        "dots": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3,
+          "default": 0
+        },
+        "tuplet": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "actual",
+            "normal"
+          ],
+          "properties": {
+            "actual": {
+              "type": "integer",
+              "minimum": 2
+            },
+            "normal": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        }
+      }
+    },
+    "measure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "number",
+        "events"
+      ],
+      "properties": {
+        "number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "events": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/noteEvent"
+              },
+              {
+                "$ref": "#/$defs/restEvent"
+              }
+            ]
+          }
+        },
+        "chords": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "event",
+              "symbol"
+            ],
+            "properties": {
+              "event": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "symbol": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    "noteEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "duration",
+        "notes"
+      ],
+      "properties": {
+        "type": {
+          "const": "note"
+        },
+        "duration": {
+          "$ref": "#/$defs/duration"
+        },
+        "notes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/note"
+          }
+        }
+      }
+    },
+    "restEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "duration"
+      ],
+      "properties": {
+        "type": {
+          "const": "rest"
+        },
+        "duration": {
+          "$ref": "#/$defs/duration"
+        }
+      }
+    },
+    "note": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pitch"
+      ],
+      "properties": {
+        "pitch": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "step",
+            "alter",
+            "octave"
+          ],
+          "properties": {
+            "step": {
+              "enum": [
+                "C",
+                "D",
+                "E",
+                "F",
+                "G",
+                "A",
+                "B"
+              ]
+            },
+            "alter": {
+              "type": "integer",
+              "minimum": -2,
+              "maximum": 2
+            },
+            "octave": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9
+            }
+          }
+        },
+        "tab": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "hole",
+            "airflow"
+          ],
+          "properties": {
+            "hole": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10
+            },
+            "airflow": {
+              "enum": [
+                "blow",
+                "draw"
+              ]
+            },
+            "bendSemitones": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 3
+            }
+          }
+        },
+        "tie": {
+          "enum": [
+            "start",
+            "stop"
+          ]
+        },
+        "slur": {
+          "enum": [
+            "start",
+            "stop"
+          ]
+        }
+      }
+    }
+  }
+}
