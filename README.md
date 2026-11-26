@@ -5,8 +5,7 @@ Solo incluye esta pagina; las demas propuestas permanecen en [ideas/](ideas/).
 
 ## Ejecutar en Windows
 
-Desde la carpeta del proyecto, con Python 3.10 o posterior y el repositorio
-`streamlit-template` en la carpeta hermana `..\streamlit-template`:
+Desde la carpeta del proyecto, con Python 3.10 o posterior y Git instalado:
 
 ```powershell
 python -m venv .venv
@@ -15,7 +14,8 @@ python -m venv .venv
 ```
 
 Abre la direccion que muestre Streamlit. Detenlo con Ctrl+C.
-No requiere credenciales ni servicios externos.
+La instalacion descarga la plantilla publica desde GitHub. La aplicacion no
+requiere credenciales ni servicios externos para ejecutarse.
 
 ## Alcance actual
 
@@ -60,7 +60,7 @@ La aplicacion lee la partitura sin modificar el JSON original.
 
 - [app.py](app.py): entrada y registro de paginas con `st.navigation`.
 - [pages/practica_libre.py](pages/practica_libre.py): interfaz y estado de esta pagina.
-- `streamlit_template`: dependencia externa editable; no se copia en esta app.
+- `streamlit_template`: dependencia externa; no se copia en esta app.
 - [assets/practica.css](assets/practica.css): estilos propios de practica.
 - [.streamlit/config.toml](.streamlit/config.toml): tema.
 - [tests/test_practica.py](tests/test_practica.py): pruebas de los controles.
@@ -69,11 +69,17 @@ Para ampliar, anade un archivo en `pages/` y registra otro `st.Page` en `app.py`
 No hace falta crear paginas vacias ni un sistema de rutas propio.
 
 Base: [streamlit-template](https://github.com/luiscaballeroramos/streamlit-template).
-`requirements.txt` instala la copia local en modo editable. La pagina importa
-`Layout` y `render_layout` desde `streamlit_template`, sin duplicar su codigo.
-Los cambios en la plantilla se aprovechan al reiniciar Streamlit.
-La instalacion requiere tener ambos repositorios; para desplegar en otro equipo
-hay que proporcionar tambien la plantilla.
+`requirements.txt` instala la plantilla desde GitHub, tambien en Streamlit
+Community Cloud. La pagina importa `Layout` y `render_layout` desde
+`streamlit_template`, sin duplicar su codigo.
+Para desarrollar con una copia local editable de la plantilla en la carpeta
+hermana `..\streamlit-template`, instalala despues de las dependencias:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -e ..\streamlit-template
+```
+
+Los cambios en esa copia se aprovechan al reiniciar Streamlit.
 El layout se usa en modo fluido para no imponer el minimo de 600 px del modo
 pantalla a un movil horizontal.
 Los estilos de contenedores dependen del DOM de Streamlit; revisarlos al actualizarlo.

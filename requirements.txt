@@ -1,2 +1,2 @@
 streamlit>=1.49,<2
--e "..\streamlit-template"
+git+https://github.com/luiscaballeroramos/streamlit-template.git
