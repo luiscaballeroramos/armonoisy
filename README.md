@@ -21,14 +21,35 @@ No requiere credenciales ni servicios externos.
 
 - Carga [Stand by Me](partituras/formateadas/stand-by-me.json) en formato JSON v3;
   muestra sus compases, partitura, tablatura y duraciones.
-- Las notas, tablaturas y barras comparten una escala proporcional al tiempo.
-  Los compases estrechos se pueden desplazar horizontalmente.
-- Bucle A-B ampliable, reducible a un compas y desplazable sin salir de la cancion.
-- Tempo mediante deslizador y botones; partitura/tablatura ocultables por separado.
-- Guia de armonica para la segunda nota con tablatura del compas de referencia;
-  si solo hay una, muestra esa nota.
-- Ordenador con ajustes laterales; en pantallas pequenas, controles debajo de
-  la musica y solo los compases del bucle visibles.
+- Las notas y tablaturas se centran en fondos de anchura proporcional a su
+  duracion, que cubren cada compas sin huecos: dentro del bucle, naranjas para
+  soplar, azules para aspirar y grises para silencios o notas sin tablatura.
+  Los compases fuera del bucle se muestran en escala de grises. La tablatura muestra solo
+  el numero de agujero y la flecha.
+  Los fondos se pueden ocultar desde Visualizacion. Compases, partitura y
+  tablatura se desplazan juntos y estan alineados. La partitura se dibuja como una
+  sola secuencia, con ligaduras continuas entre compases. El boton fijo a la
+  izquierda vuelve al inicio del bucle.
+  Desplazar la cinta no modifica
+  el bucle. La cinta tambien admite teclado:
+  selecciona la zona de musica y usa las flechas.
+- Al mostrar la partitura, una celda fija a la izquierda indica la clave de sol
+  y el compas de la cancion mientras se desplaza la cinta.
+- Bucle A-B editable pulsando el mapa: fuera se amplia, dentro se mueve el
+  extremo mas cercano (en empate, A); pulsar un extremo lo retira del bucle.
+  El ultimo compas seleccionado se mantiene al pulsarlo.
+  El boton para repetir el compas actual esta junto al de volver al inicio y
+  permanece desactivado hasta que exista reproduccion.
+- Reproduccion y tempo en una fila compacta al final del bloque de musica;
+  en pantallas estrechas la fila se desplaza horizontalmente. Partitura y
+  tablatura ocultables por separado.
+- Guia de armonica de frente con sus diez agujeros bajo la partitura; la
+  indicacion de la nota actual esta pendiente de la reproduccion.
+- En los ajustes se elige si las cintas muestran toda la cancion, el bucle con
+  un compas adyacente a cada lado, o solo el bucle. En los limites solo se
+  incluye el contexto disponible.
+- Los ajustes estan en un desplegable de ancho completo al final, con opciones
+  agrupadas horizontalmente; conservan sus valores durante la sesion.
 - Estado durante la sesion de Streamlit, no guardado persistente en disco.
 
 Play/Pause/Stop, metronomo, volumen y timer estan desactivados y etiquetados:

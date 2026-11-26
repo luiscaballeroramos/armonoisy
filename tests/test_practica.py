@@ -18,44 +18,68 @@ class PracticeTests(unittest.TestCase):
         self.app = AppTest.from_file(str(APP), default_timeout=15).run()
         self.assertEqual(len(self.app.exception), 0)
 
-    def test_loop_resize_move_and_single_measure(self) -> None:
-        last = int(self.app.slider(key="practice_loop").max)
-        self.app.slider(key="practice_loop").set_range(2, 4).run()
-        self.app.button(key="loop_right").click().run()
-        self.assertEqual(self.app.slider(key="practice_loop").value, (3, 5))
-        self.assertEqual(self.app.select_slider(key="practice_measure").value, 5)
-        self.app.slider(key="practice_loop").set_range(last, last).run()
-        self.assertEqual(self.app.select_slider(key="practice_measure").value, last)
-        self.assertTrue(self.app.button(key="loop_right").disabled)
-        self.app.button(key="loop_left").click().run()
-        self.assertEqual(self.app.slider(key="practice_loop").value, (last - 1, last - 1))
-        self.assertEqual(self.app.select_slider(key="practice_measure").value, last - 1)
-        self.app.slider(key="practice_loop").set_range(1, last).run()
-        self.assertTrue(self.app.button(key="loop_left").disabled)
-        self.assertTrue(self.app.button(key="loop_right").disabled)
+    def set_loop(self, start: int, end: int) -> None:
+        self.app.session_state["practice_loop_bounds"] = (start, end)
+        self.app.run()
+
+    def test_loop_resize_and_move(self) -> None:
+        self.app.button(key="map_measure_1").click().run()
+        self.assertEqual(self.app.session_state["practice_loop_bounds"], (1, 5))
+        self.app.button(key="map_measure_7").click().run()
+        self.assertEqual(self.app.session_state["practice_loop_bounds"], (1, 7))
+        self.app.button(key="map_measure_4").click().run()
+        self.assertEqual(self.app.session_state["practice_loop_bounds"], (4, 7))
+        self.app.button(key="map_measure_6").click().run()
+        self.assertEqual(self.app.session_state["practice_loop_bounds"], (4, 6))
+        self.app.button(key="map_measure_4").click().run()
+        self.assertEqual(self.app.session_state["practice_loop_bounds"], (5, 6))
         self.assertEqual(len(self.app.exception), 0)
+
+    def test_clicking_loop_endpoints_removes_them_until_one_remains(self) -> None:
+        self.set_loop(3, 5)
+        self.app.button(key="map_measure_5").click().run()
+        self.assertEqual(self.app.session_state["practice_loop_bounds"], (3, 4))
+        self.app.button(key="map_measure_3").click().run()
+        self.assertEqual(self.app.session_state["practice_loop_bounds"], (4, 4))
+        self.app.button(key="map_measure_4").click().run()
+        self.assertEqual(self.app.session_state["practice_loop_bounds"], (4, 4))
+        html = "\n".join(item.value for item in self.app.get("html"))
+        self.assertIn("Bucle 4–4", html)
+        self.assertIn("A · B · En bucle", html)
+        self.assertIn('href="#practice-measure-4"', html)
+        self.assertEqual(len(self.app.exception), 0)
+
+    def test_existing_slider_session_migrates_to_map(self) -> None:
+        app = AppTest.from_file(str(APP), default_timeout=15)
+        app.session_state["practice_loop"] = (2, 7)
+        app.run()
+        self.assertEqual(app.session_state["practice_loop_bounds"], (2, 7))
+        app.button(key="map_measure_1").click().run()
+        self.assertEqual(app.session_state["practice_loop_bounds"], (1, 7))
+        self.assertEqual(len(app.exception), 0)
 
     def test_selected_score_is_loaded_and_rendered(self) -> None:
         data = json.loads(SCORE.read_text(encoding="utf-8"))
-        self.assertEqual(self.app.subheader[0].value, data["title"])
-        self.assertEqual(self.app.slider(key="practice_loop").max, len(data["measures"]))
+        header = next(item.value for item in self.app.get("html") if 'class="practice-header"' in item.value)
+        self.assertIn(f'<h3>{data["title"]}</h3>', header)
+        self.assertEqual(len([b for b in self.app.button if b.key and b.key.startswith("map_measure_")]), len(data["measures"]))
         html = next(item.value for item in self.app.get("html") if 'class="practice-score"' in item.value)
-        self.assertEqual(html.count('<article class="measure '), len(data["measures"]))
+        self.assertEqual(html.count('class="measure-heading measure-cell '), len(data["measures"]))
         self.assertIn(f'Compás {len(data["measures"])}', html)
         first = data["measures"][0]
         tab = next(event["tab"] for event in first["events"] if "tab" in event)
         expected = f'{tab.lstrip("+")}{"↑" if tab.startswith("+") else "↓"}'
-        first_card = re.search(r'<article class="measure .*?</article>', html, re.DOTALL)
+        first_card = re.search(r'<div class="tabs measure-cell [^"]+" data-measure="1".*?</div>', html, re.DOTALL)
         assert first_card is not None
         self.assertIn(expected, first_card.group())
         self.assertIn("class=\"rest\"", html)
-        self.assertIn("(3:2)", html)
-        single = next(
-            measure["number"] for measure in data["measures"]
-            if sum("tab" in event for event in measure["events"]) == 1
-        )
-        self.app.slider(key="practice_loop").set_range(single, single).run()
-        self.assertTrue(any("Única nota con tablatura" in item.value for item in self.app.caption))
+        self.assertNotIn("<small>", first_card.group())
+        guide = next(item.value for item in self.app.get("html") if 'class="practice-holes"' in item.value)
+        self.assertEqual(re.findall(r"<span>(\d+)</span>", guide), [str(hole) for hole in range(1, 11)])
+        self.assertIn('role="img"', guide)
+        self.assertIn("Guía de armónica C, agujeros del 1 al 10", guide)
+        self.assertFalse(any("Guía · armónica" in item.value for item in self.app.markdown))
+        self.assertNotIn("active", guide)
         self.assertEqual(len(self.app.exception), 0)
 
     def test_missing_score_reports_error(self) -> None:
@@ -70,6 +94,85 @@ class PracticeTests(unittest.TestCase):
             app = AppTest.from_file(str(APP), default_timeout=15).run()
         self.assertEqual(len(app.exception), 0)
         self.assertIn("No se pudo cargar la partitura", app.error[0].value)
+
+    def test_tab_shows_only_hole_and_direction_with_matching_backgrounds(self) -> None:
+        original_read_text = Path.read_text
+        data = {
+            "version": 3, "title": "Dirección", "instrument": {"key": "C"},
+            "timeSignature": "4/4",
+            "measures": [
+                {"number": 1, "events": [
+                    {"pitch": "C5", "tab": "+4", "duration": "quarter"},
+                    {"pitch": "D5", "tab": "4", "duration": "quarter", "bendSemitones": 1},
+                    {"rest": True, "duration": "quarter"},
+                    {"pitch": "E5", "duration": "quarter"},
+                ]},
+                {"number": 2, "events": [
+                    {"pitch": "C5", "tab": "+4", "duration": "whole"}
+                ]},
+            ],
+        }
+
+        def read_text(path: Path, *args, **kwargs):
+            return json.dumps(data) if path == SCORE else original_read_text(path, *args, **kwargs)
+
+        with patch.object(Path, "read_text", read_text):
+            app = AppTest.from_file(str(APP), default_timeout=15).run()
+        self.assertEqual(len(app.exception), 0)
+        html = next(item.value for item in app.get("html") if 'class="practice-score"' in item.value)
+        tab_cell = re.search(r'<div class="tabs measure-cell [^"]+" data-measure="1".*?</div>', html, re.DOTALL)
+        bg_cell = re.search(r'<div class="measure-background" data-measure="1".*?</div>', html, re.DOTALL)
+        assert tab_cell is not None and bg_cell is not None
+        self.assertEqual(re.findall(r'<span class="[^"]+" style="[^"]+">([^<]+)</span>', tab_cell.group()),
+                         ["4↑", "4↓", "—", "—"])
+        self.assertEqual(re.findall(r'<span class="([^"]+)"', bg_cell.group()),
+                         ["blow-0", "draw-1", "rest", "unknown"])
+        app.checkbox(key="practice_duration").uncheck().run()
+        app.checkbox(key="practice_score").uncheck().run()
+        html = next(item.value for item in app.get("html") if 'class="practice-score"' in item.value)
+        self.assertIn(">4↑</span>", html)
+        self.assertIn(">4↓</span>", html)
+        self.assertNotIn("<small>", html)
+
+    def test_clef_and_meter_in_separate_signature_cell(self) -> None:
+        html = next(item.value for item in self.app.get("html") if 'class="practice-score"' in item.value)
+        images = re.findall(r'data:image/svg\+xml;base64,([^"]+)', html)
+        self.assertGreater(len(images), 1)
+        scores = [b64decode(image).decode("utf-8") for image in images]
+        self.assertEqual(scores[0].count("𝄞"), 1)
+        self.assertIn('alt="Clave de sol, compás 4/4"', html)
+        self.assertIn('class="practice-signature"', html)
+        self.assertIn('>4</text>', scores[0])
+        self.assertTrue(all("𝄞" not in score for score in scores[1:]))
+        self.set_loop(3, 5)
+        html = next(item.value for item in self.app.get("html") if 'class="practice-score"' in item.value)
+        scores = [b64decode(image).decode("utf-8") for image in re.findall(
+            r'data:image/svg\+xml;base64,([^"]+)', html
+        )]
+        self.assertEqual(sum(score.count("𝄞") for score in scores), 1)
+        self.app.checkbox(key="practice_score").uncheck().run()
+        html = next(item.value for item in self.app.get("html") if 'class="practice-score"' in item.value)
+        self.assertIn('class="practice-signature"', html)
+        self.assertNotIn('class="signature-image"', html)
+        self.assertIn('aria-label="Ir al inicio del bucle"', html)
+
+    def test_signature_uses_score_meter(self) -> None:
+        original_read_text = Path.read_text
+        data = json.loads(SCORE.read_text(encoding="utf-8"))
+        data["timeSignature"] = "3/4"
+
+        def read_text(path: Path, *args, **kwargs):
+            return json.dumps(data) if path == SCORE else original_read_text(path, *args, **kwargs)
+
+        with patch.object(Path, "read_text", read_text):
+            app = AppTest.from_file(str(APP), default_timeout=15).run()
+        html = next(item.value for item in app.get("html") if 'class="practice-score"' in item.value)
+        self.assertIn('alt="Clave de sol, compás 3/4"', html)
+        image = re.search(r'data:image/svg\+xml;base64,([^"]+)', html)
+        assert image is not None
+        svg = b64decode(image.group(1)).decode("utf-8")
+        self.assertIn(">3</text>", svg)
+        self.assertIn(">4</text>", svg)
 
     def test_elements_share_duration_scaled_positions(self) -> None:
         triplets = [
@@ -100,39 +203,145 @@ class PracticeTests(unittest.TestCase):
             app = AppTest.from_file(str(APP), default_timeout=15).run()
         self.assertEqual(len(app.exception), 0)
         html = next(item.value for item in app.get("html") if 'class="practice-score"' in item.value)
-        card = re.search(r'<article class="measure .*?</article>', html, re.DOTALL)
-        assert card is not None
-        image = re.search(r'data:image/svg\+xml;base64,([^"]+)', card.group())
+        image = re.search(r'<img class="staff-image" src="data:image/svg\+xml;base64,([^"]+)', html)
         assert image is not None
         svg = ElementTree.fromstring(b64decode(image.group(1)))
+        staff = next(element for element in svg if element.tag.endswith("path"))
+        for height in (55, 65, 75, 85, 95):
+            self.assertIn(f"M0 {height}H600", staff.attrib["d"])
+        first_measure = next(element for element in svg if element.get("transform") == "translate(0 0)")
         points = [
             float(element.attrib["cx"] if element.tag.endswith("ellipse") else element.attrib["x"])
-            for element in svg.iter()
+            for element in first_measure.iter()
             if element.tag.endswith("ellipse")
             or (element.tag.endswith("text") and element.get("font-size") == "28")
         ]
+        tab_cell = re.search(r'<div class="tabs measure-cell [^"]+" data-measure="1".*?</div>', html, re.DOTALL)
+        bar_cell = re.search(r'<div class="measure-background" data-measure="1".*?</div>', html, re.DOTALL)
+        assert tab_cell is not None and bar_cell is not None
         tabs = [
             float(value) * 3 for value in re.findall(
-                r'<span class="(?:blow|draw|rest)" style="left: ([0-9.]+)%"', card.group()
+                r'<span class="(?:blow|draw|rest)" style="left: ([0-9.]+)%"', tab_cell.group()
             )
         ]
         bars = [
             (float(start) * 3, float(width) * 3)
             for start, width in re.findall(
-                r'<span class="(?:rest)?" style="left: ([0-9.]+)%; width: ([0-9.]+)%"',
-                card.group(),
+                r'<span class="(?:rest|blow-[01]|draw-[01]|unknown)" style="left: ([0-9.]+)%; width: ([0-9.]+)%"',
+                bar_cell.group(),
             )
         ]
-        expected_positions = (70, 122.5, 157.5, 192.5, 227.5)
-        expected_widths = (52.5, 35, 35, 35, 52.5)
+        expected_positions = (37.5, 100, 150, 200, 262.5)
+        expected_widths = (75, 50, 50, 50, 75)
         self.assertEqual((len(points), len(tabs), len(bars)), (5, 5, 5))
         for point, tab, (start, width), expected, expected_width in zip(
             points, tabs, bars, expected_positions, expected_widths
         ):
             self.assertAlmostEqual(point, expected, delta=0.1)
             self.assertAlmostEqual(tab, point, delta=0.1)
-            self.assertAlmostEqual(start, point, delta=0.1)
+            self.assertAlmostEqual(start + width / 2, point, delta=0.1)
             self.assertAlmostEqual(width, expected_width, delta=0.01)
+        self.assertAlmostEqual(bars[0][0], 0)
+        self.assertAlmostEqual(bars[-1][0] + bars[-1][1], 300)
+        for previous, following in zip(bars, bars[1:]):
+            self.assertAlmostEqual(previous[0] + previous[1], following[0], delta=0.01)
+
+    def test_measure_columns_are_shared_by_all_rows(self) -> None:
+        html = next(item.value for item in self.app.get("html") if 'class="practice-score"' in item.value)
+        for row in ("heading-row", "tabs-row"):
+            self.assertIn(f'practice-row {row}', html)
+        self.assertNotIn("navigation-row", html)
+        self.assertNotIn("measure-navigation", html)
+        self.assertLess(html.index('class="practice-signature"'), html.index('class="practice-score"'))
+        self.assertIn('class="background-row"', html)
+        self.assertNotIn('duration-row', html)
+        for number in range(1, len(json.loads(SCORE.read_text(encoding="utf-8"))["measures"]) + 1):
+            self.assertEqual(html.count(f'data-measure="{number}"'), 3)
+        self.assertEqual(html.count('class="staff-image"'), 1)
+        self.app.checkbox(key="practice_score").uncheck().run()
+        html = next(item.value for item in self.app.get("html") if 'class="practice-score"' in item.value)
+        self.assertIn("--signature-width: 70px", html)
+        self.assertIn('class="tabs measure-cell ', html)
+        self.assertNotIn('class="staff-image"', html)
+
+    def test_duration_background_can_be_hidden_without_losing_divisions(self) -> None:
+        self.app.checkbox(key="practice_duration").uncheck().run()
+        html = next(item.value for item in self.app.get("html") if 'class="practice-score"' in item.value)
+        backgrounds = re.findall(r'<div class="measure-background" data-measure="\d+" data-selected="(?:true|false)">(.*?)</div>', html)
+        self.assertEqual(len(backgrounds), len(json.loads(SCORE.read_text(encoding="utf-8"))["measures"]))
+        self.assertTrue(all(not background for background in backgrounds))
+        self.assertIn('class="staff-image"', html)
+        self.assertIn('class="tabs measure-cell ', html)
+
+    def test_ties_across_measures_use_one_continuous_curve(self) -> None:
+        original_read_text = Path.read_text
+        data = {
+            "version": 3, "title": "Ligadura", "instrument": {"key": "C"},
+            "timeSignature": "4/4",
+            "measures": [
+                {"number": 1, "events": [
+                    {"pitch": "C5", "tab": "+4", "duration": "whole", "tie": "start"}
+                ]},
+                {"number": 2, "events": [
+                    {"pitch": "C5", "tab": "+4", "duration": "whole", "tie": "stop"}
+                ]},
+            ],
+        }
+
+        def read_text(path: Path, *args, **kwargs):
+            return json.dumps(data) if path == SCORE else original_read_text(path, *args, **kwargs)
+
+        with patch.object(Path, "read_text", read_text):
+            app = AppTest.from_file(str(APP), default_timeout=15).run()
+        self.assertEqual(len(app.exception), 0)
+        html = next(item.value for item in app.get("html") if 'class="practice-score"' in item.value)
+        image = re.search(r'<img class="staff-image" src="data:image/svg\+xml;base64,([^"]+)', html)
+        assert image is not None
+        svg = ElementTree.fromstring(b64decode(image.group(1)))
+        ties = [element for element in svg.iter() if element.get("class") == "tie"]
+        self.assertEqual(len(ties), 1)
+        self.assertIn("M156.0", ties[0].attrib["d"])
+        self.assertIn("444.0", ties[0].attrib["d"])
+
+        data["measures"][1]["events"][0]["pitch"] = "D5"
+        with patch.object(Path, "read_text", read_text):
+            invalid = AppTest.from_file(str(APP), default_timeout=15).run()
+        self.assertIn("ligadura", invalid.error[0].value.lower())
+
+    def test_all_score_ties_are_rendered_once(self) -> None:
+        data = json.loads(SCORE.read_text(encoding="utf-8"))
+        expected = sum(event.get("tie") == "start" for measure in data["measures"] for event in measure["events"])
+        html = next(item.value for item in self.app.get("html") if 'class="practice-score"' in item.value)
+        image = re.search(r'<img class="staff-image" src="data:image/svg\+xml;base64,([^"]+)', html)
+        assert image is not None
+        svg = ElementTree.fromstring(b64decode(image.group(1)))
+        self.assertEqual(sum(element.get("class") == "tie" for element in svg.iter()), expected)
+
+    def test_dense_measures_scale_without_minimum_width(self) -> None:
+        data = {
+            "version": 3, "title": "Prueba", "instrument": {"key": "C"},
+            "timeSignature": "4/4",
+            "measures": [
+                {"number": 1, "events": [
+                    {"pitch": "C5", "tab": "+4", "duration": "16th"}
+                    for _ in range(16)
+                ]},
+                {"number": 2, "events": [
+                    {"pitch": "C5", "tab": "+4", "duration": "whole"}
+                ]},
+            ],
+        }
+        original_read_text = Path.read_text
+
+        def read_text(path: Path, *args, **kwargs):
+            return json.dumps(data) if path == SCORE else original_read_text(path, *args, **kwargs)
+
+        with patch.object(Path, "read_text", read_text):
+            app = AppTest.from_file(str(APP), default_timeout=15).run()
+        self.assertEqual(len(app.exception), 0)
+        html = next(item.value for item in app.get("html") if 'class="practice-score"' in item.value)
+        self.assertEqual(re.findall(r'--notation-width: (\d+)', html), ["512", "300"])
+        self.assertNotIn("min-width:", html)
 
     def test_tempo_buttons_follow_slider_and_limits(self) -> None:
         self.app.slider(key="practice_tempo").set_value(40).run()
@@ -145,13 +354,109 @@ class PracticeTests(unittest.TestCase):
         self.assertEqual(self.app.slider(key="practice_tempo").value, 159)
         self.assertEqual(len(self.app.exception), 0)
 
+    def test_transport_controls_share_one_row(self) -> None:
+        transport = next(c for c in self.app.get("flex_container") if c.key == "practice-transport")
+        row = transport.children[0]
+        columns = list(row.children.values())
+        self.assertEqual(len(columns), 8)
+        self.assertEqual([column.button[0].label for column in columns[:3]], ["▶ Play", "Ⅱ Pause", "■ Stop"])
+        self.assertEqual(columns[3].caption[0].value, "Audio pendiente")
+        self.assertEqual(columns[4].button[0].key, "tempo_down")
+        self.assertIn("BPM", columns[5].markdown[0].value)
+        self.assertEqual(columns[6].button[0].key, "tempo_up")
+        self.assertEqual(columns[7].slider[0].key, "practice_tempo")
+
+    def test_collapsing_settings_preserves_values(self) -> None:
+        self.set_loop(1, 2)
+        self.app.checkbox(key="practice_duration").uncheck().run()
+        self.assertTrue(any(item.label == "Ajustes" for item in self.app.expander))
+        self.app.slider(key="practice_tempo").set_value(88).run()
+        self.assertEqual(self.app.session_state["practice_loop_bounds"], (1, 2))
+        self.assertFalse(self.app.checkbox(key="practice_duration").value)
+        self.assertEqual(self.app.slider(key="practice_tempo").value, 88)
+        self.assertEqual(len(self.app.exception), 0)
+
+    def test_simplified_header_and_guide(self) -> None:
+        self.assertEqual(len(self.app.title), 0)
+        header = next(item.value for item in self.app.get("html") if 'class="practice-header"' in item.value)
+        self.assertIn("<h3>Stand by Me</h3>", header)
+        self.assertIn("Armónica C · 4/4 · Bucle 3–5 · Repetición sin límite", header)
+        self.set_loop(4, 6)
+        header = next(item.value for item in self.app.get("html") if 'class="practice-header"' in item.value)
+        self.assertIn("Bucle 4–6", header)
+        self.assertEqual(
+            [radio.label for radio in next(e for e in self.app.expander if e.label == "Ajustes").radio],
+            ["Compases en las cintas"],
+        )
+        self.assertEqual(len(self.app.get("popover")), 0)
+        visible_text = "\n".join(item.value for item in self.app.caption)
+        self.assertNotIn("ARMONOISY · Primera interfaz", visible_text)
+        self.assertNotIn("Soplar: naranja", visible_text)
+        self.assertNotIn("Segunda nota", visible_text)
+        self.assertNotIn("Sonido y aviso se activarán", visible_text)
+        self.assertFalse(any("Tu fragmento" in item.value for item in self.app.markdown))
+        self.assertFalse(any("Mapa de la canción" in item.value for item in self.app.markdown))
+        self.assertFalse(any(e.label == "Reproducción y tempo" for e in self.app.expander))
+        self.assertIsNotNone(self.app.slider(key="practice_tempo"))
+        self.assertEqual(len(self.app.select_slider), 0)
+        html = next(item.value for item in self.app.get("html") if 'class="practice-score"' in item.value)
+        self.assertIn('class="practice-repeat" type="button" disabled', html)
+        self.assertIn("Repetir el compás actual (disponible con reproducción)", html)
+
+    def test_map_and_music_follow_loop_including_single_measure(self) -> None:
+        self.set_loop(2, 4)
+        html = "\n".join(item.value for item in self.app.get("html"))
+        self.assertEqual(self.app.button(key="map_measure_2").label, "2")
+        self.assertEqual(self.app.button(key="map_measure_4").label, "4")
+        self.assertIn('href="#practice-measure-2" aria-label="Ir al inicio del bucle"', html)
+        self.assertIn('id="practice-measure-4"', html)
+        self.assertIn('aria-label="Música: desplazar horizontalmente"', html)
+        self.set_loop(3, 3)
+        html = "\n".join(item.value for item in self.app.get("html"))
+        self.assertEqual(self.app.button(key="map_measure_3").label, "3")
+        self.assertIn("A · B · En bucle", html)
+        self.assertEqual(len(self.app.exception), 0)
+
+    def test_context_measure_marking_tracks_loop(self) -> None:
+        self.set_loop(3, 5)
+        html = next(item.value for item in self.app.get("html") if 'class="practice-score"' in item.value)
+        self.assertIn('data-measure="2" data-selected="false"', html)
+        self.assertIn('data-measure="3" data-selected="true"', html)
+        self.assertRegex(html, r'class="tabs measure-cell context" data-measure="2"')
+        self.app.button(key="map_measure_2").click().run()
+        html = next(item.value for item in self.app.get("html") if 'class="practice-score"' in item.value)
+        self.assertIn('data-measure="2" data-selected="true"', html)
+        self.assertNotRegex(html, r'class="tabs measure-cell context" data-measure="2"')
+
+    def test_visibility_modes_and_song_boundaries(self) -> None:
+        self.set_loop(3, 5)
+        for mode, expected in (
+            ("Todos", list(range(1, 26))),
+            ("Bucle y adyacentes", [2, 3, 4, 5, 6]),
+            ("Solo bucle", [3, 4, 5]),
+        ):
+            self.app.radio(key="practice_visibility").set_value(mode).run()
+            html = next(item.value for item in self.app.get("html") if 'class="practice-score"' in item.value)
+            self.assertEqual([int(n) for n in re.findall(r'id="practice-measure-(\d+)"', html)], expected)
+            image = re.search(r'<img class="staff-image" src="data:image/svg\+xml;base64,([^"]+)', html)
+            assert image is not None
+            svg = ElementTree.fromstring(b64decode(image.group(1)))
+            self.assertEqual(svg.attrib["viewBox"], f"{(expected[0] - 1) * 300} 0 {len(expected) * 300} 135")
+        self.app.radio(key="practice_visibility").set_value("Bucle y adyacentes").run()
+        self.set_loop(1, 1)
+        html = next(item.value for item in self.app.get("html") if 'class="practice-score"' in item.value)
+        self.assertEqual(re.findall(r'id="practice-measure-(\d+)"', html), ["1", "2"])
+        self.set_loop(25, 25)
+        html = next(item.value for item in self.app.get("html") if 'class="practice-score"' in item.value)
+        self.assertEqual(re.findall(r'id="practice-measure-(\d+)"', html), ["24", "25"])
+
     def test_view_changes_keep_practice_settings_and_one_notation(self) -> None:
         self.app.slider(key="practice_tempo").set_value(88).run()
-        self.app.slider(key="practice_loop").set_range(1, 2).run()
+        self.set_loop(1, 2)
         self.app.checkbox(key="practice_score").uncheck().run()
         self.assertTrue(self.app.checkbox(key="practice_tabs").disabled)
         self.assertEqual(self.app.slider(key="practice_tempo").value, 88)
-        self.assertEqual(self.app.slider(key="practice_loop").value, (1, 2))
+        self.assertEqual(self.app.session_state["practice_loop_bounds"], (1, 2))
         self.app.checkbox(key="practice_score").check().run()
         self.app.checkbox(key="practice_tabs").uncheck().run()
         self.assertTrue(self.app.checkbox(key="practice_score").disabled)

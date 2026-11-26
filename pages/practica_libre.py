@@ -1,5 +1,6 @@
 from base64 import b64encode
 from fractions import Fraction
+from html import escape
 import json
 import math
 from pathlib import Path
@@ -9,7 +10,6 @@ from typing import NamedTuple
 import streamlit as st
 
 from streamlit_template import Layout, render_layout
-
 
 class Event(NamedTuple):
     pitch: str | None
@@ -48,8 +48,6 @@ RESTS = {
     "16th": "𝄿", "32nd": "𝅀", "64th": "𝅁",
 }
 STAFF_WIDTH = 300
-TIMELINE_START = 70
-TIMELINE_WIDTH = 210
 MIN_EVENT_SPACING = 32
 
 
@@ -109,6 +107,17 @@ def load_score(path: Path) -> tuple[str, str, str, tuple[tuple[Event, ...], ...]
         measures.append(tuple(parse_event(event) for event in measure["events"]))
     if not measures:
         raise ValueError("La partitura no contiene compases.")
+    events = [event for measure in measures for event in measure]
+    for index, event in enumerate(events):
+        if event.tie == "start" and (
+            index + 1 == len(events) or events[index + 1].tie != "stop"
+            or events[index + 1].pitch != event.pitch
+        ):
+            raise ValueError("La ligadura debe terminar en la siguiente nota de la misma altura.")
+        if event.tie == "stop" and (
+            index == 0 or events[index - 1].tie != "start" or events[index - 1].pitch != event.pitch
+        ):
+            raise ValueError("La ligadura no tiene una nota inicial válida.")
     return title, instrument, meter, tuple(measures)
 
 
@@ -120,41 +129,44 @@ except (OSError, ValueError, KeyError, TypeError) as exc:
     st.error(f"No se pudo cargar la partitura: {exc}")
     st.stop()
 
-HORIZONTAL = Layout(
-    (("music", "settings"), ("transport", "settings")), (3, 1), (4, 1), min_height=0,
+PRACTICE_LAYOUT = Layout(
+    (("music",), ("settings",)), (1,), (1, 1), min_height=0,
 )
-VERTICAL = Layout(
-    (("music",), ("transport",), ("settings",)), (1,), (3, 1, 2), min_height=0,
-)
-
 
 def initialise_state() -> None:
     start = min(3, len(MEASURES))
     end = min(5, len(MEASURES))
     defaults = {
-        "practice_loop": (start, end),
-        "practice_measure": min(4, end),
+        "practice_loop_bounds": st.session_state.get("practice_loop", (start, end)),
         "practice_tempo": 72,
         "practice_score": True,
         "practice_tabs": True,
         "practice_duration": True,
+        "practice_visibility": "Todos",
     }
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
 
 
-def adjust_reference() -> None:
-    start, end = st.session_state.practice_loop
-    st.session_state.practice_measure = min(end, max(start, st.session_state.practice_measure))
-
-
-def move_loop(offset: int) -> None:
-    start, end = st.session_state.practice_loop
-    if not 1 <= start + offset <= end + offset <= len(MEASURES):
-        raise ValueError("El bucle debe permanecer dentro de la canción.")
-    st.session_state.practice_loop = (start + offset, end + offset)
-    st.session_state.practice_measure += offset
+def select_loop_measure(number: int) -> None:
+    start, end = st.session_state.practice_loop_bounds
+    if not 1 <= number <= len(MEASURES):
+        raise ValueError("El compás debe pertenecer a la canción.")
+    if number < start:
+        start = number
+    elif number > end:
+        end = number
+    elif start < end and number == start:
+        start += 1
+    elif start < end and number == end:
+        end -= 1
+    elif start < number < end:
+        if number - start <= end - number:
+            start = number
+        else:
+            end = number
+    st.session_state.practice_loop_bounds = (start, end)
 
 
 def change_tempo(offset: int) -> None:
@@ -175,16 +187,16 @@ def event_timing(events: tuple[Event, ...]) -> tuple[tuple[float, float], ...]:
     result = []
     for event in events:
         result.append((
-            float(TIMELINE_START + TIMELINE_WIDTH * elapsed / total),
-            float(TIMELINE_WIDTH * event.beats / total),
+            float(STAFF_WIDTH * elapsed / total),
+            float(STAFF_WIDTH * event.beats / total),
         ))
         elapsed += event.beats
     return tuple(result)
 
 
-def score(events: tuple[Event, ...], number: int) -> str:
+def score_measure(events: tuple[Event, ...]) -> str:
     glyphs = []
-    positions = [start for start, _ in event_timing(events)]
+    positions = [start + width / 2 for start, width in event_timing(events)]
     tuplet_start = None
     for index, event in enumerate(events):
         x = positions[index]
@@ -242,177 +254,238 @@ def score(events: tuple[Event, ...], number: int) -> str:
               {stem}{dots}{accidental}
             </g>
         """)
-        if event.tie == "start":
-            end = 290
-            for later in range(index + 1, len(events)):
-                if events[later].pitch == event.pitch and events[later].tie == "stop":
-                    end = positions[later] - 6
-                    break
-            glyphs.append(
-                f'<path d="M{x + 6:.1f} {y + 8} Q{(x + end) / 2:.1f} {y + 20} '
-                f'{end:.1f} {y + 8}" stroke="currentColor" fill="none"/>'
+    return "".join(glyphs)
+
+
+def score(measures: tuple[tuple[Event, ...], ...], first: int, last: int) -> str:
+    width = STAFF_WIDTH * len(measures)
+    glyphs = []
+    events_with_positions = []
+    for index, events in enumerate(measures):
+        x_offset = index * STAFF_WIDTH
+        glyphs.append(f'<g transform="translate({x_offset} 0)">{score_measure(events)}</g>')
+        events_with_positions.extend(
+            (event, x_offset + position + duration / 2)
+            for event, (position, duration) in zip(events, event_timing(events))
+        )
+    ties = []
+    for (event, x), (following, next_x) in zip(events_with_positions, events_with_positions[1:]):
+        if (event.tie == "start" and event.pitch is not None
+                and following.tie == "stop" and event.pitch == following.pitch):
+            y = pitch_y(event.pitch)
+            ties.append(
+                f'<path class="tie" d="M{x + 6:.1f} {y + 8} Q{(x + next_x) / 2:.1f} {y + 20} '
+                f'{next_x - 6:.1f} {y + 8}" stroke="currentColor" fill="none"/>'
             )
-        elif event.tie == "stop" and not any(
-            earlier.pitch == event.pitch and earlier.tie == "start" for earlier in events[:index]
-        ):
-            glyphs.append(
-                f'<path d="M12 {y + 8} Q{(12 + x) / 2:.1f} {y + 20} '
-                f'{x - 6:.1f} {y + 8}" stroke="currentColor" fill="none"/>'
-            )
+    staff_lines = " ".join(f"M0 {y}H{width}" for y in (55, 65, 75, 85, 95))
+    bar_lines = " ".join(f"M{x} 55V95" for x in range(0, width + 1, STAFF_WIDTH))
     svg = f"""
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {STAFF_WIDTH} 135" color="#365950">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="{(first - 1) * STAFF_WIDTH} 0 {(last - first + 1) * STAFF_WIDTH} 135" color="#4b4b4b">
           <path stroke="currentColor" stroke-width="1" opacity=".3" fill="none"
-            d="M12 55H288 M12 65H288 M12 75H288 M12 85H288
-            M12 95H288 M12 55V95 M288 55V95"/>
-          <text x="20" y="97" fill="currentColor" font-family="Segoe UI Symbol" font-size="38">𝄞</text>
-          {''.join(glyphs)}
+            d="{staff_lines} {bar_lines}"/>
+          {''.join(glyphs)}{''.join(ties)}
         </svg>
     """
-    # st.html sanitizes inline SVG; an SVG image preserves the notation safely.
     encoded = b64encode(svg.encode("utf-8")).decode("ascii")
     return (
         f'<img class="staff-image" src="data:image/svg+xml;base64,{encoded}" '
-        f'alt="Compás {number}: {len(events)} eventos">'
+        f'alt="Partitura: compases {first} a {last}">'
+    )
+
+
+def score_signature(meter: str, start: int, show_score: bool) -> str:
+    match = re.fullmatch(r"(\d+)/(\d+)", meter)
+    if match:
+        numerator, denominator = match.groups()
+        signature = (
+            f'<text x="65" y="74" text-anchor="middle" font-size="24" font-weight="bold">{numerator}</text>'
+            f'<text x="65" y="95" text-anchor="middle" font-size="24" font-weight="bold">{denominator}</text>'
+        )
+    else:
+        signature = f'<text x="60" y="83" font-size="14">{escape(meter)}</text>'
+    svg = f"""
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {STAFF_WIDTH} 135" color="#365950">
+          <path stroke="currentColor" stroke-width="1" opacity=".3" fill="none"
+            d="M0 55H300 M0 65H300 M0 75H300 M0 85H300 M0 95H300"/>
+          <text x="10" y="97" fill="currentColor" font-family="Segoe UI Symbol" font-size="38">𝄞</text>
+          {signature}
+        </svg>
+    """
+    encoded = b64encode(svg.encode("utf-8")).decode("ascii")
+    image = (
+        f'<img class="signature-image" src="data:image/svg+xml;base64,{encoded}" '
+        f'alt="Clave de sol, compás {escape(meter, quote=True)}">'
+        if show_score else ""
+    )
+    return (
+        '<div class="practice-signature">'
+        f'<a class="practice-return" href="#practice-measure-{start}" '
+        'aria-label="Ir al inicio del bucle" title="Ir al inicio del bucle">↤</a>'
+        '<button class="practice-repeat" type="button" disabled '
+        'aria-label="Repetir el compás actual (disponible con reproducción)" '
+        'title="Repetir el compás actual: disponible con reproducción">↻</button>'
+        f'{image}'
+        '</div>'
     )
 
 
 def render_music() -> None:
-    start, end = st.session_state.practice_loop
-    reference = st.session_state.practice_measure
-    st.subheader(TITLE)
-    st.caption(f"Armónica {INSTRUMENT} · {METER} · Bucle {start}–{end} · Repetición sin límite")
-    cards = []
-    for number, events in enumerate(MEASURES, 1):
+    start, end = st.session_state.practice_loop_bounds
+    with st.container(key="practice-map"):
+        columns = st.columns(len(MEASURES))
+        for number, column in enumerate(columns, 1):
+            column.button(
+                str(number), key=f"map_measure_{number}",
+                type="primary" if start <= number <= end else "secondary",
+                on_click=select_loop_measure, args=(number,), use_container_width=True,
+                help=f"Compás {number}" + (" · inicio A" if number == start else "")
+                + (" · fin B" if number == end else ""),
+            )
+    if st.session_state.practice_visibility == "Todos":
+        first, last = 1, len(MEASURES)
+    elif st.session_state.practice_visibility == "Bucle y adyacentes":
+        first, last = max(1, start - 1), min(len(MEASURES), end + 1)
+    else:
+        first, last = start, end
+    headings, tablatures, backgrounds = [], [], []
+    for number in range(first, last + 1):
+        events = MEASURES[number - 1]
         timing = event_timing(events)
-        minimum_width = (
+        notation_width = max(
+            STAFF_WIDTH,
             math.ceil(MIN_EVENT_SPACING * STAFF_WIDTH / min(width for _, width in timing[:-1]))
-            if len(events) > 1 else 0
+            if len(events) > 1 else STAFF_WIDTH,
         )
         selected = start <= number <= end
-        label = "Referencia" if number == reference else "En bucle" if selected else "Contexto"
-        classes = "current" if number == reference else "selected" if selected else "context"
-        notation = score(events, number) if st.session_state.practice_score else ""
+        labels = []
+        if number == start:
+            labels.append("A")
+        if number == end:
+            labels.append("B")
+        labels.append("En bucle" if selected else "Contexto")
+        label = " · ".join(labels)
+        classes = "selected" if selected else "context"
         tabs = ""
         if st.session_state.practice_tabs:
             symbols = []
-            for event, (position, _) in zip(events, timing):
+            for event, (position, duration) in zip(events, timing):
                 colour = "blow" if event.tab_value and event.blow else "draw" if event.tab_value else "rest"
-                rhythm = (RESTS[event.figure] if event.pitch is None else FIGURES[event.figure][1])
-                rhythm += "." * event.dots
-                if event.tuplet:
-                    rhythm += f" ({event.tuplet[0]}:{event.tuplet[1]})"
                 symbols.append(
-                    f'<span class="{colour}" style="left: {100 * position / STAFF_WIDTH:.6f}%">{event.tab}'
-                    + (f"<small>⤵ −{event.bend} st</small>" if event.bend else "")
-                    + f"<small>{rhythm}</small></span>"
+                    f'<span class="{colour}" style="left: {100 * (position + duration / 2) / STAFF_WIDTH:.6f}%">{event.tab}'
+                    f'</span>'
                 )
-            tabs = f'<div class="tabs">{"".join(symbols)}</div>'
-        duration = (
-            '<div class="duration" aria-label="Duraciones proporcionales">'
+            tabs = (
+                f'<div class="tabs measure-cell {classes}" data-measure="{number}" '
+                f'style="--notation-width: {notation_width}; --notation-scale: {24 / notation_width:.8f}">'
+                f'{"".join(symbols)}</div>'
+            )
+        background = (
+            f'<div class="measure-background" data-measure="{number}" data-selected="{str(selected).lower()}">'
             + "".join(
-                f'<span class="{"rest" if event.pitch is None else ""}" '
+                f'<span class="{"rest" if event.pitch is None else "blow-" + str(index % 2) if event.tab_value and event.blow else "draw-" + str(index % 2) if event.tab_value else "unknown"}" '
                 f'style="left: {100 * position / STAFF_WIDTH:.6f}%; '
                 f'width: {100 * width / STAFF_WIDTH:.6f}%"></span>'
-                for event, (position, width) in zip(events, timing)
+                for index, (event, (position, width)) in enumerate(zip(events, timing))
             ) + "</div>"
-            if st.session_state.practice_duration else ""
+            if st.session_state.practice_duration else f'<div class="measure-background" data-measure="{number}" data-selected="{str(selected).lower()}"></div>'
         )
-        cards.append(f"""
-            <article class="measure {classes}">
-              <div class="measure-heading"><span>Compás {number}</span><span>{label}</span></div>
-              <div class="measure-viewport">
-                <div class="measure-content" style="min-width: {minimum_width}px">
-                  {notation}{tabs}{duration}
-                </div>
-              </div>
-            </article>
-        """)
-    st.html(f'<div class="practice-score">{"".join(cards)}</div>')
-    st.caption("↑ Soplar · ↓ Aspirar · ⤵ Bend · Barras proporcionales a la duración")
+        headings.append(
+            f'<div class="measure-heading measure-cell {classes}" data-measure="{number}" '
+            f'id="practice-measure-{number}" aria-label="Compás {number}: {len(events)} eventos · {label}">'
+            f'<span>{number}</span><span>{label}</span></div>'
+        )
+        if tabs:
+            tablatures.append(tabs)
+        backgrounds.append(background)
+    signature = score_signature(METER, start, st.session_state.practice_score)
+    notation = score(MEASURES, first, last) if st.session_state.practice_score else ""
+    st.html(
+        f'<div class="practice-score-container" '
+        f'style="--measure-count: {last - first + 1}; '
+        f'--signature-width: 70px">'
+        f'{signature}<div class="practice-score" role="region" '
+        f'aria-label="Música: desplazar horizontalmente" '
+        f'tabindex="0">'
+        f'<div class="background-row" aria-hidden="true">{"".join(backgrounds)}</div>'
+        f'<div class="practice-row heading-row" aria-label="Compases">{"".join(headings)}</div>'
+        f'{notation}'
+        f'<div class="practice-row tabs-row" aria-label="Tablatura">{"".join(tablatures)}</div>'
+        f'</div></div>'
+    )
+    render_guide()
+    render_transport()
 
 
 def render_transport() -> None:
-    playback, tempo = st.columns([1.2, 1])
-    with playback:
-        with st.container(key="practice-playback"):
-            play, pause, stop = st.columns(3)
-            play.button("▶ Play", type="primary", disabled=True, use_container_width=True)
-            pause.button("Ⅱ Pause", disabled=True, use_container_width=True)
-            stop.button("■ Stop", disabled=True, use_container_width=True)
-    with tempo:
-        with st.container(key="practice-tempo"):
-            lower, value, higher = st.columns([1, 3, 1])
-            lower.button(
-                "−", key="tempo_down", on_click=change_tempo, args=(-1,),
-                disabled=st.session_state.practice_tempo == 40, help="Bajar 1 BPM",
-            )
-            value.markdown(f"**{st.session_state.practice_tempo} BPM**")
-            higher.button(
-                "＋", key="tempo_up", on_click=change_tempo, args=(1,),
-                disabled=st.session_state.practice_tempo == 160, help="Subir 1 BPM",
-            )
-            st.slider("Tempo", 40, 160, key="practice_tempo", label_visibility="collapsed")
-    st.caption("Audio pendiente. Play reanudará; Pause conservará la posición; Stop volverá al inicio del bucle.")
+    with st.container(key="practice-transport"):
+        play, pause, stop, status, lower, value, higher, slider = st.columns(
+            [1, 1, 1, 1, 0.5, 0.8, 0.5, 2],
+            gap="small", vertical_alignment="center",
+        )
+        play.button("▶ Play", type="primary", disabled=True, use_container_width=True)
+        pause.button("Ⅱ Pause", disabled=True, use_container_width=True)
+        stop.button("■ Stop", disabled=True, use_container_width=True)
+        status.caption("Audio pendiente")
+        lower.button(
+            "−", key="tempo_down", on_click=change_tempo, args=(-1,),
+            disabled=st.session_state.practice_tempo == 40, help="Bajar 1 BPM",
+            use_container_width=True,
+        )
+        value.markdown(f"**{st.session_state.practice_tempo} BPM**")
+        higher.button(
+            "＋", key="tempo_up", on_click=change_tempo, args=(1,),
+            disabled=st.session_state.practice_tempo == 160, help="Subir 1 BPM",
+            use_container_width=True,
+        )
+        slider.slider("Tempo", 40, 160, key="practice_tempo", label_visibility="collapsed")
+
+
+def render_guide() -> None:
+    holes = "".join(f"<span>{hole}</span>" for hole in range(1, 11))
+    st.html(
+        f'<div class="practice-holes" role="img" '
+        f'aria-label="Guía de armónica {escape(INSTRUMENT, quote=True)}, '
+        f'agujeros del 1 al 10; indicación de nota pendiente de reproducción">{holes}</div>'
+    )
 
 
 def render_settings() -> None:
-    st.subheader("Tu bucle")
-    st.slider(
-        "Compases A–B", 1, len(MEASURES), key="practice_loop", on_change=adjust_reference,
-        help="Arrastra los dos extremos para ampliar o reducir. Pueden coincidir para repetir un solo compás.",
-    )
-    start, end = st.session_state.practice_loop
-    left, right = st.columns(2)
-    left.button(
-        "← Mover", key="loop_left", on_click=move_loop, args=(-1,),
-        disabled=start == 1, use_container_width=True,
-    )
-    right.button(
-        "Mover →", key="loop_right", on_click=move_loop, args=(1,),
-        disabled=end == len(MEASURES), use_container_width=True,
-    )
-    st.select_slider(
-        "Compás de referencia", options=list(range(start, end + 1)), key="practice_measure",
-        help="Inspecciona un compás manualmente; todavía no hay avance automático.",
-    )
-    notes = [event for event in MEASURES[st.session_state.practice_measure - 1] if event.tab_value]
-    note = notes[min(1, len(notes) - 1)] if notes else None
-    st.markdown(f"**Guía · armónica {INSTRUMENT}**")
-    holes = "".join(
-        f'<span class="{"active" if note and hole == note.hole else ""}">{hole}</span>'
-        for hole in range(1, 11)
-    )
-    label = f"Agujero {note.hole}" if note else "Sin tablatura en este compás"
-    st.html(f'<div class="practice-holes" aria-label="{label}">{holes}</div>')
-    if note:
-        instruction = "Sopla" if note.blow else "Aspira"
-        bend = f" · ⤵ baja {note.bend} semitono" if note.bend else ""
-        position = "Segunda nota" if len(notes) > 1 else "Única nota"
-        st.caption(f"{position} con tablatura del compás: {note.tab} · {instruction}{bend}")
-    else:
-        st.caption("No hay notas con tablatura en este compás.")
-    with st.expander("Visualización"):
-        st.checkbox("Partitura", key="practice_score", disabled=not st.session_state.practice_tabs)
-        st.checkbox("Tablatura", key="practice_tabs", disabled=not st.session_state.practice_score)
-        st.checkbox("Barras de duración", key="practice_duration")
-    with st.expander("Sonido y aviso · próximamente"):
-        st.caption("Estos controles se activarán al incorporar audio y timer.")
-        st.toggle("Metrónomo", disabled=True)
-        st.slider("Volumen", 0, 100, 75, disabled=True)
-        st.number_input("Aviso (minutos)", min_value=1, value=15, disabled=True)
+    with st.expander("Ajustes"):
+        display, sound, notice = st.columns(3)
+        with display:
+            st.markdown("**Visualización**")
+            st.radio(
+                "Compases en las cintas",
+                ("Todos", "Bucle y adyacentes", "Solo bucle"),
+                key="practice_visibility",
+            )
+            st.checkbox("Partitura", key="practice_score", disabled=not st.session_state.practice_tabs)
+            st.checkbox("Tablatura", key="practice_tabs", disabled=not st.session_state.practice_score)
+            st.checkbox("Fondos de duración", key="practice_duration")
+        with sound:
+            st.markdown("**Sonido · próximamente**")
+            st.toggle("Metrónomo", disabled=True)
+            st.slider("Volumen", 0, 100, 75, disabled=True)
+        with notice:
+            st.markdown("**Aviso · próximamente**")
+            st.number_input("Aviso (minutos)", min_value=1, value=15, disabled=True)
 
 
 def render() -> None:
     initialise_state()
     stylesheet = Path(__file__).resolve().parents[1] / "assets" / "practica.css"
     st.html(f"<style>{stylesheet.read_text(encoding='utf-8')}</style>")
-    st.title("Práctica libre")
-    st.caption("ARMONOISY · Primera interfaz · Sin reproducción de audio")
+    start, end = st.session_state.practice_loop_bounds
+    st.html(
+        '<header class="practice-header">'
+        f'<h3>{escape(TITLE)}</h3>'
+        f'<p>Armónica {escape(INSTRUMENT)} · {escape(METER)} · '
+        f'Bucle {start}–{end} · Repetición sin límite</p>'
+        '</header>'
+    )
     render_layout(
-        key="practice",
-        horizontal=HORIZONTAL,
-        vertical=VERTICAL,
-        regions={"music": render_music, "transport": render_transport, "settings": render_settings},
+        key="practice", horizontal=PRACTICE_LAYOUT, vertical=PRACTICE_LAYOUT,
+        regions={"music": render_music, "settings": render_settings},
         height="fluid",
     )
 
