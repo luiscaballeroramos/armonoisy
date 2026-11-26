@@ -1,0 +1,103 @@
+IDEAS PARA ARMONOISY
+Lista editable de propuestas; no implica funcionalidades implementadas.
+Las imágenes y galerías son maquetas estáticas con música de ejemplo inventada.
+Las maquetas reflejan esta lista; la vista móvil vertical es una mejora futura.
+
+PRÁCTICA LIBRE
+01. Seleccionar intuitivamente los compases A-B del bucle, tocando o arrastrando.
+02. Ampliar, reducir o mover el bucle; avanzar solo cuando el usuario decida.
+03. Solapar bucles para practicar las transiciones entre fragmentos.
+04. Repetir sin límite: Play inicia/reanuda; Pause conserva posición; Stop vuelve
+    al inicio del bucle (o canción sin bucle), desde donde arrancará Play.
+05. Añadir cuenta de entrada y un compás previo de contexto opcional.
+06. Configurar descansos entre vueltas en pulsos o segundos.
+07. No incluir por ahora guardado manual de bucles con nombre.
+08. Recuperar la canción y los ajustes de la última práctica.
+
+PARTITURAS Y AYUDAS
+09. Mostrar partitura dinámica con notas y figuras rítmicas; guardar partitura
+    y tablatura asociadas a la canción para recuperarlas y editarlas.
+    Combinar la partitura con fondos rellenos cuya longitud represente la
+    duración de las notas, en paralelo al pentagrama; permitir activar o
+    desactivar esta ayuda, como los demás modos de visualización de la partitura.
+10. Tablatura: número de agujero, ↑ soplar, ↓ aspirar y figuras de duración.
+    Bend propuesto: curva descendente y bajada en semitonos (4↓ ⤵ −1 st).
+11. Resaltar el compás o nota actual cuando exista sincronización.
+12. Mostrar símbolos además de colores; no depender solo del color.
+13. Mostrar partitura y tablatura juntas, o esconder cualquiera por separado.
+14. Importar partituras con revisión manual; no dar por correcta la conversión.
+15. Registrar tipo y tonalidad de armónica para comprobar compatibilidad.
+    Mostrar una armónica en C con agujero activo, soplo/aspiración y bend
+    sincronizados; indicar solo bends posibles en cada agujero.
+
+TEMPO Y ACOMPAÑAMIENTO
+16. Guardar BPM predeterminados en cada canción y usarlos como tempo inicial.
+    Permitir ajustarlos con deslizador y botones.
+17. Ralentizar audio sin cambiar la afinación; advertir límites de calidad.
+18. Aplicar cambios de tempo al inicio de la siguiente vuelta.
+19. Activar o desactivar el metrónomo, solo o junto al acompañamiento.
+20. Crear bases de piano, bajo y percusión a partir de acordes y estructura.
+21. Cargar pistas propias o autorizadas y marcar sus intervalos A-B.
+22. Alinear audio y compases manualmente cuando no exista sincronización.
+23. Activar, silenciar o bajar la melodía guía.
+24. Alternar vueltas de escucha y ejecución de forma opcional.
+25. Ajustar instrumentos por separado solo con pistas separadas o generadas.
+    Ajustar volumen general y por pista.
+26. Adaptar la base a tonalidad, acordes, compás y posición de la armónica.
+
+APRENDIZAJE Y SEGUIMIENTO
+27. Inicialmente, solo timer de aviso configurable, sin interrumpir la práctica.
+28. Marcar manualmente tres niveles: «no me sale», «casi» y «lo tengo».
+29. Guardar tempo cómodo y el nivel marcado de cada fragmento.
+30. Sugerir repasos y ejercicios derivados de pasajes difíciles.
+31. Grabar, escuchar y comparar tomas sin puntuaciones obligatorias.
+32. Explorar micrófono para afinación y estabilidad de notas sostenidas.
+
+INTERFAZ
+33. Inicio sencillo: «Continuar última canción», «Mi cancionero» y «Añadir canción».
+34. Ordenador: funcionalidad completa, varios compases y ajustes laterales.
+    Más contexto y controles a mano que en móvil, no solo una versión ampliada.
+35. Inicialmente móvil horizontal: adaptar elementos a pantallas pequeñas.
+36. Modo atril: notas grandes, pocos controles y compás actual destacado.
+37. Mantener Play, Pause, Stop y tempo accesibles sin tapar la tablatura.
+38. Diseño amigable, intuitivo y centrado en lo importante; ajustes secundarios
+    accesibles en paneles o pantallas aparte, sin amontonarlo todo.
+    Práctica: música, bucle, tempo y Play/Pause/Stop; accesos rápidos laterales
+    en ordenador. Conservar páginas diferenciadas; simplificar cada una.
+39. Usar botones táctiles amplios y atajos de teclado.
+40. Permitir desplazamiento cuando no quepan todos los compases.
+41. Configuración general: personalizar colores y tamaños de elementos.
+42. Permitir cambiar entre modo claro y oscuro.
+43. Definir ajustes iniciales para canciones nuevas y restaurar valores por defecto.
+
+POSIBLES MEJORAS FUTURAS
+- Subida progresiva de tempo opcional.
+- Panoramización por pista.
+- Sesiones opcionales con timer, calentamiento, repaso y fragmento nuevo;
+  permitir saltar cualquier paso.
+- Registrar dificultades por fragmento (ritmo, aire, saltos o bends).
+- Evaluación automática de canciones completas.
+- Móvil vertical para navegar, seleccionar canciones y ajustar opciones.
+- Admitir ambas orientaciones conservando bucles y ajustes al girar.
+- Soporte para pedal compatible.
+- Personalizar la disposición de elementos según preferencias.
+
+PRIORIDAD INICIAL
+Inicio rápido + bucle libre + Play/Pause/Stop + tempo + timer de aviso.
+Partitura/tablatura guardadas con la canción + guía de armónica en C.
+Ordenador y móvil horizontal; entrada/descanso y recuperación de ajustes.
+Después: acompañamiento y grabación; apartado de mejoras futuras fuera del inicio.
+Streamlit para biblioteca y ajustes; valorar un componente web para audio preciso.
+
+ARCHIVOS
+Cada carpeta contiene una imagen por página y galeria.html como índice visual:
+01-practica-libre.png             07-configuracion-general.png
+02-acompanamiento-y-tempo.png     08-seleccion-del-bucle.png
+03-modo-atril.png                 09-progreso.png
+04-inicio.png                    10-cancionero.png
+05-visualizacion.png             11-anadir-cancion.png
+06-guia-y-timer.png               12-grabacion-y-escucha.png
+El botón «Páginas» vuelve al índice; Inicio y Configuración son vistas separadas.
+maquetas.css y maquetas.js comparten el diseño de las tres galerías.
+Los enlaces permiten recorrer las vistas; reproducción y ajustes son ilustrativos.
+movil-vertical muestra una posible mejora futura.
