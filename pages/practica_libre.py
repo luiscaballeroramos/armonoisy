@@ -47,6 +47,10 @@ RESTS = {
     "whole": "𝄻", "half": "𝄼", "quarter": "𝄽", "eighth": "𝄾",
     "16th": "𝄿", "32nd": "𝅀", "64th": "𝅁",
 }
+STAFF_WIDTH = 300
+TIMELINE_START = 70
+TIMELINE_WIDTH = 210
+MIN_EVENT_SPACING = 32
 
 
 def parse_event(raw: dict) -> Event:
@@ -170,7 +174,10 @@ def event_timing(events: tuple[Event, ...]) -> tuple[tuple[float, float], ...]:
     elapsed = Fraction()
     result = []
     for event in events:
-        result.append((float(70 + 210 * elapsed / total), float(210 * event.beats / total)))
+        result.append((
+            float(TIMELINE_START + TIMELINE_WIDTH * elapsed / total),
+            float(TIMELINE_WIDTH * event.beats / total),
+        ))
         elapsed += event.beats
     return tuple(result)
 
@@ -253,7 +260,7 @@ def score(events: tuple[Event, ...], number: int) -> str:
                 f'{x - 6:.1f} {y + 8}" stroke="currentColor" fill="none"/>'
             )
     svg = f"""
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 135" color="#365950">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {STAFF_WIDTH} 135" color="#365950">
           <path stroke="currentColor" stroke-width="1" opacity=".3" fill="none"
             d="M12 55H288 M12 65H288 M12 75H288 M12 85H288
             M12 95H288 M12 55V95 M288 55V95"/>
@@ -278,7 +285,7 @@ def render_music() -> None:
     for number, events in enumerate(MEASURES, 1):
         timing = event_timing(events)
         minimum_width = (
-            math.ceil(30 * 300 / min(width for _, width in timing[:-1]))
+            math.ceil(MIN_EVENT_SPACING * STAFF_WIDTH / min(width for _, width in timing[:-1]))
             if len(events) > 1 else 0
         )
         selected = start <= number <= end
@@ -295,7 +302,7 @@ def render_music() -> None:
                 if event.tuplet:
                     rhythm += f" ({event.tuplet[0]}:{event.tuplet[1]})"
                 symbols.append(
-                    f'<span class="{colour}" style="left: {position / 3:.6f}%">{event.tab}'
+                    f'<span class="{colour}" style="left: {100 * position / STAFF_WIDTH:.6f}%">{event.tab}'
                     + (f"<small>⤵ −{event.bend} st</small>" if event.bend else "")
                     + f"<small>{rhythm}</small></span>"
                 )
@@ -304,7 +311,8 @@ def render_music() -> None:
             '<div class="duration" aria-label="Duraciones proporcionales">'
             + "".join(
                 f'<span class="{"rest" if event.pitch is None else ""}" '
-                f'style="left: {position / 3:.6f}%; width: {width / 3:.6f}%"></span>'
+                f'style="left: {100 * position / STAFF_WIDTH:.6f}%; '
+                f'width: {100 * width / STAFF_WIDTH:.6f}%"></span>'
                 for event, (position, width) in zip(events, timing)
             ) + "</div>"
             if st.session_state.practice_duration else ""
