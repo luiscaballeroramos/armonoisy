@@ -1,0 +1,10 @@
+Grand Piano, Kawai, Sustain samples, velocity 3.
+Source: Versilian Community Sample Library (VCSL)
+Repository: https://github.com/sgossner/VCSL
+Revision: c1ea7bcc3c7309650ab0da9d15c9cd1fbc4a4c7e
+License: CC0 1.0 Universal, https://creativecommons.org/publicdomain/zero/1.0/
+
+The four WAVs are redistributed unmodified. Their labels C3, C4, C5 and C6
+sound approximately at C4, C5, C6 and C7 respectively. The player selects the
+nearest sample and corrects its measured frequency to the score pitch.
+Piano samples are not looped: their recorded sound decays naturally.

@@ -1,0 +1,10 @@
+Finger Bass YR, version 2019-09-30: Yamaha RBX electric bass, played by
+Andrea Biasior, with edits by the FreePats project.
+Source: https://github.com/freepats/electric-bass-YR
+Revision: 8dcb7ea9116f417273ef8c030d15e7b3aa654301
+License: CC0 1.0 Universal, https://creativecommons.org/publicdomain/zero/1.0/
+
+The FLAC recordings in samples/finger are redistributed unmodified, with names
+E.flac, A.flac, C.flac and D#.flac changed to E1.flac, A1.flac, C2.flac and
+Dsharp2.flac. The player corrects their measured frequencies and transposes
+them to the score melody three octaves lower. Samples are not looped.

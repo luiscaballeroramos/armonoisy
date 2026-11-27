@@ -15,6 +15,7 @@
     "mode": "major"
   },
   "timeSignature": "4/4",
+  "tempoBpm": 120,
   "measures": [
     {
       "number": 1,

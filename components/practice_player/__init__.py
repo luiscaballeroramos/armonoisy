@@ -4,7 +4,6 @@ from typing import Any
 import streamlit as st
 
 
-@st.cache_resource(show_spinner=False)
 def _register_component() -> Any:
     assets = Path(__file__).resolve().parents[2] / "assets"
     return st.components.v2.component(
@@ -15,10 +14,15 @@ def _register_component() -> Any:
     )
 
 
-def render_player(data: dict[str, Any], on_tempo_change: Any) -> Any:
+def render_player(
+    data: dict[str, Any],
+    on_tempo_change: Any,
+    on_repeat_measure_change: Any,
+) -> Any:
     return _register_component()(
         data=data,
         default={"tempo": data["tempo"]},
         key="practice_player",
         on_tempo_change=on_tempo_change,
+        on_repeat_measure_change=on_repeat_measure_change,
     )

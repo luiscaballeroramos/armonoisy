@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 from xml.etree import ElementTree
 
+from components.practice_player import render_player
 from streamlit.testing.v1 import AppTest
 
 
@@ -30,6 +31,49 @@ def show_all_measures(app: AppTest) -> None:
     show_practice(app)
 
 
+class PracticePlayerComponentTests(unittest.TestCase):
+    def test_component_uses_updated_javascript_on_next_render(self) -> None:
+        original_read_text = Path.read_text
+        javascript = ["export default () => 'first';"]
+
+        def read_text(path: Path, *args, **kwargs):
+            if path.name == "practice_player.js":
+                return javascript[0]
+            return original_read_text(path, *args, **kwargs)
+
+        with patch.object(Path, "read_text", read_text):
+            with patch("components.practice_player.st.components.v2.component") as register:
+                render_player(
+                    {"tempo": 120},
+                    on_tempo_change=lambda: None,
+                    on_repeat_measure_change=lambda: None,
+                )
+                javascript[0] = "export default () => 'updated';"
+                render_player(
+                    {"tempo": 120},
+                    on_tempo_change=lambda: None,
+                    on_repeat_measure_change=lambda: None,
+                )
+
+        self.assertEqual(register.call_count, 2)
+        self.assertEqual(register.call_args_list[0].kwargs["js"], "export default () => 'first';")
+        self.assertEqual(register.call_args_list[1].kwargs["js"], "export default () => 'updated';")
+
+    def test_component_registers_repeat_measure_callback(self) -> None:
+        repeat_callback = lambda: None
+        with patch("components.practice_player.st.components.v2.component") as register:
+            render_player(
+                {"tempo": 120},
+                on_tempo_change=lambda: None,
+                on_repeat_measure_change=repeat_callback,
+            )
+
+        self.assertIs(
+            register.return_value.call_args.kwargs["on_repeat_measure_change"],
+            repeat_callback,
+        )
+
+
 class PracticeTests(unittest.TestCase):
     def setUp(self) -> None:
         self.app = AppTest.from_file(str(APP), default_timeout=15).run()
@@ -39,9 +83,22 @@ class PracticeTests(unittest.TestCase):
         self.app.session_state["practice_loop_bounds"] = (start, end)
         self.app.run()
 
-    def test_only_selected_measures_are_visible_by_default(self) -> None:
+    def test_only_loop_measures_are_visible_by_default(self) -> None:
+        measure_count = len(json.loads(SCORE.read_text(encoding="utf-8"))["measures"])
+        html = next(item.value for item in self.app.get("html") if 'class="practice-score"' in item.value)
+        self.assertEqual(
+            re.findall(r'id="practice-measure-(\d+)"', html),
+            [str(number) for number in range(1, measure_count + 1)],
+        )
+        self.assertEqual(self.app.session_state["practice_loop_bounds"], (1, measure_count))
+        for number in range(1, measure_count + 1):
+            self.assertIn(f'data-measure="{number}" data-selected="true"', html)
+        self.set_loop(3, 5)
         html = next(item.value for item in self.app.get("html") if 'class="practice-score"' in item.value)
         self.assertEqual(re.findall(r'id="practice-measure-(\d+)"', html), ["3", "4", "5"])
+        show_settings(self.app)
+        self.assertEqual(self.app.radio(key="practice_visibility").value, "Solo bucle")
+        show_practice(self.app)
         self.app.button(key="map_measure_2").click().run()
         html = next(item.value for item in self.app.get("html") if 'class="practice-score"' in item.value)
         self.assertEqual(re.findall(r'id="practice-measure-(\d+)"', html), ["2", "3", "4", "5"])
@@ -49,9 +106,89 @@ class PracticeTests(unittest.TestCase):
         self.assertEqual(self.app.radio(key="practice_visibility").value, "Solo bucle")
         self.app.radio(key="practice_visibility").set_value("Todos").run()
         show_practice(self.app)
-        self.assertEqual(self.app.session_state["practice_visibility_saved"], "Todos")
         html = next(item.value for item in self.app.get("html") if 'class="practice-score"' in item.value)
-        self.assertEqual(len(re.findall(r'id="practice-measure-(\d+)"', html)), 25)
+        self.assertEqual(
+            re.findall(r'id="practice-measure-(\d+)"', html),
+            [str(number) for number in range(1, measure_count + 1)],
+        )
+
+    def test_existing_visibility_preferences_are_preserved(self) -> None:
+        measure_count = len(json.loads(SCORE.read_text(encoding="utf-8"))["measures"])
+        for key, value, expected in (
+            ("practice_visibility_saved", "Todos", [str(number) for number in range(1, measure_count + 1)]),
+            ("practice_visibility_saved", "Solo bucle", ["3", "4", "5"]),
+            ("practice_visibility", "Bucle y adyacentes", ["2", "3", "4", "5", "6"]),
+        ):
+            with self.subTest(key=key):
+                app = AppTest.from_file(str(APP), default_timeout=15)
+                app.session_state[key] = value
+                app.session_state["practice_loop_bounds"] = (3, 5)
+                app.run()
+                self.assertEqual(len(app.exception), 0)
+                self.assertEqual(app.session_state["practice_loop_bounds"], (3, 5))
+                html = next(item.value for item in app.get("html") if 'class="practice-score"' in item.value)
+                self.assertEqual(re.findall(r'id="practice-measure-(\d+)"', html), expected)
+                show_settings(app)
+                self.assertEqual(app.radio(key="practice_visibility").value, value)
+
+    def test_initial_loop_and_player_cover_short_scores(self) -> None:
+        original_read_text = Path.read_text
+        data = json.loads(original_read_text(SCORE, encoding="utf-8"))
+
+        def read_text(path: Path, *args, **kwargs):
+            return json.dumps(data) if path == SCORE else original_read_text(path, *args, **kwargs)
+
+        with patch.object(Path, "read_text", read_text):
+            for count in (1, 2):
+                with self.subTest(measures=count):
+                    data["measures"] = [
+                        {"number": number, "events": [
+                            {"pitch": "C5", "tab": "+4", "duration": "whole"}
+                        ]}
+                        for number in range(1, count + 1)
+                    ]
+                    with patch("components.practice_player.render_player") as player:
+                        app = AppTest.from_file(str(APP), default_timeout=15).run()
+                    self.assertEqual(len(app.exception), 0)
+                    self.assertEqual(app.session_state["practice_loop_bounds"], (1, count))
+                    player_data = player.call_args.args[0]
+                    self.assertEqual((player_data["startMeasure"], player_data["endMeasure"]), (1, count))
+                    self.assertEqual(
+                        [event["measureNumber"] for event in player_data["melodyEvents"]],
+                        list(range(1, count + 1)),
+                    )
+
+    def test_player_initially_receives_the_full_song(self) -> None:
+        measure_count = len(json.loads(SCORE.read_text(encoding="utf-8"))["measures"])
+        with patch("components.practice_player.render_player") as player:
+            app = AppTest.from_file(str(APP), default_timeout=15).run()
+        self.assertEqual(len(app.exception), 0)
+        player_data = player.call_args.args[0]
+        self.assertEqual((player_data["startMeasure"], player_data["endMeasure"]), (1, measure_count))
+        played_measures = {event["measureNumber"] for event in player_data["melodyEvents"]}
+        self.assertIn(1, played_measures)
+        self.assertIn(measure_count, played_measures)
+
+    def test_score_and_tablature_expose_shared_note_targets(self) -> None:
+        html = next(item.value for item in self.app.get("html") if 'class="practice-score"' in item.value)
+        tablature_targets = {
+            (measure, str(event_index))
+            for measure, contents in re.findall(
+                r'<div class="tabs measure-cell [^"]+" data-measure="(\d+)"[^>]*>(.*?)</div>',
+                html,
+                re.DOTALL,
+            )
+            for event_index, _ in enumerate(re.findall(
+                r'<span class="(?:blow|draw|rest)" style="left: [0-9.]+%"',
+                contents,
+            ))
+        }
+        score_targets = set(re.findall(
+            r'<span class="staff-event-marker" data-event-measure="(\d+)" data-event-index="(\d+)"',
+            html,
+        ))
+        self.assertTrue(score_targets)
+        self.assertTrue(score_targets.issubset(tablature_targets))
 
     def test_screen_layout_preserves_frame_when_notation_is_hidden(self) -> None:
         layout_css = next(
@@ -76,9 +213,10 @@ class PracticeTests(unittest.TestCase):
             [region.key for region in grid.children.values()],
             ["practice-music", "practice-settings"],
         )
-        self.assertEqual(self.app.slider(key="practice_tempo").value, 72)
+        self.assertEqual(self.app.slider(key="practice_tempo").value, 120)
 
     def test_loop_resize_and_move(self) -> None:
+        self.set_loop(3, 5)
         self.app.button(key="map_measure_1").click().run()
         self.assertEqual(self.app.session_state["practice_loop_bounds"], (1, 5))
         self.app.button(key="map_measure_7").click().run()
@@ -91,22 +229,29 @@ class PracticeTests(unittest.TestCase):
         self.assertEqual(self.app.session_state["practice_loop_bounds"], (5, 6))
         self.assertEqual(len(self.app.exception), 0)
 
-    def test_music_percentages_update_without_resetting_practice(self) -> None:
+    def test_music_percentages_reserve_guide_space_without_distribution_controls(self) -> None:
+        styles = next(item.value for item in self.app.get("html") if "--music-rows:" in item.value)
+        self.assertIn("--music-rows: minmax(0, 15fr) minmax(0, 50fr) minmax(0, 15fr) minmax(0, 20fr)", styles)
         self.set_loop(2, 6)
         self.app.slider(key="practice_tempo").set_value(88).run()
         self.app.button(key="practice_screen_toggle").click().run()
         self.assertEqual(self.app.session_state["practice_screen"], "settings")
-        for selector, guide, transport in ((20, 15, 25), (25, 25, 25), (10, 10, 10)):
+        for selector, guide, transport in ((15, 10, 20), (20, 15, 25), (25, 25, 25), (10, 10, 10)):
             with self.subTest(shares=(selector, guide, transport)):
-                self.app.number_input(key="practice_height_map").set_value(selector)
-                self.app.number_input(key="practice_height_guide").set_value(guide)
-                self.app.number_input(key="practice_height_transport").set_value(transport)
+                self.app.session_state["practice_height_map_saved"] = selector
+                self.app.session_state["practice_height_guide_saved"] = guide
+                self.app.session_state["practice_height_transport_saved"] = transport
                 self.app.run()
-                notation = 100 - selector - guide - transport
+                allocated_guide = max(15, guide)
+                notation = 100 - selector - allocated_guide - transport
                 styles = next(item.value for item in self.app.get("html") if "--music-rows:" in item.value)
-                rows = " ".join(f"minmax(0, {value}fr)" for value in (selector, notation, guide, transport))
+                rows = " ".join(f"minmax(0, {value}fr)" for value in (selector, notation, allocated_guide, transport))
                 self.assertIn(f"--music-rows: {rows}", styles)
-                self.assertTrue(any(f"{notation}% restante" in item.value for item in self.app.caption))
+                self.assertEqual(self.app.session_state["practice_height_guide_saved"], guide)
+                self.assertFalse(any(
+                    item.key in ("practice_height_map", "practice_height_guide", "practice_height_transport")
+                    for item in self.app.number_input
+                ))
                 self.assertEqual(self.app.session_state["practice_loop_bounds"], (2, 6))
                 self.assertEqual(self.app.session_state["practice_tempo_saved"], 88)
                 self.assertEqual(len(self.app.exception), 0)
@@ -116,7 +261,7 @@ class PracticeTests(unittest.TestCase):
         self.app.checkbox(key="practice_score").uncheck().run()
         show_practice(self.app)
         styles = next(item.value for item in self.app.get("html") if "--music-rows:" in item.value)
-        self.assertIn("--music-rows: minmax(0, 10fr) minmax(0, 70fr) minmax(0, 10fr) minmax(0, 10fr)", styles)
+        self.assertIn("--music-rows: minmax(0, 10fr) minmax(0, 65fr) minmax(0, 15fr) minmax(0, 10fr)", styles)
 
     def test_settings_screen_preserves_practice_state(self) -> None:
         self.set_loop(4, 7)
@@ -124,7 +269,6 @@ class PracticeTests(unittest.TestCase):
         show_settings(self.app)
         self.app.checkbox(key="practice_duration").uncheck().run()
         self.app.radio(key="practice_visibility").set_value("Solo bucle").run()
-        self.app.number_input(key="practice_height_map").set_value(18).run()
         self.app.button(key="practice_screen_toggle").click().run()
         self.assertEqual(self.app.session_state["practice_screen"], "practice")
         self.assertEqual(self.app.session_state["practice_loop_bounds"], (4, 7))
@@ -135,7 +279,6 @@ class PracticeTests(unittest.TestCase):
         self.assertTrue(any(item.key == "practice-settings-page" for item in self.app.get("flex_container")))
         self.assertFalse(self.app.checkbox(key="practice_duration").value)
         self.assertEqual(self.app.radio(key="practice_visibility").value, "Solo bucle")
-        self.assertEqual(self.app.number_input(key="practice_height_map").value, 18)
         show_practice(self.app)
         self.assertEqual(self.app.session_state["practice_screen"], "practice")
         self.assertEqual(self.app.slider(key="practice_tempo").value, 96)
@@ -184,9 +327,13 @@ class PracticeTests(unittest.TestCase):
         self.assertIn("class=\"rest\"", html)
         self.assertNotIn("<small>", first_card.group())
         guide = next(item.value for item in self.app.get("html") if 'class="practice-holes"' in item.value)
-        self.assertEqual(re.findall(r"<span>(\d+)</span>", guide), [str(hole) for hole in range(1, 11)])
+        self.assertEqual(
+            re.findall(r'<span data-hole="(\d+)">(\d+)</span>', guide),
+            [(str(hole), str(hole)) for hole in range(1, 11)],
+        )
         self.assertIn('role="img"', guide)
         self.assertIn("Guía de armónica C, agujeros del 1 al 10", guide)
+        self.assertIn('data-base-label="Guía de armónica C, agujeros del 1 al 10"', guide)
         self.assertFalse(any("Guía · armónica" in item.value for item in self.app.markdown))
         self.assertNotIn("active", guide)
         self.assertEqual(len(self.app.exception), 0)
@@ -489,6 +636,39 @@ class PracticeTests(unittest.TestCase):
         self.assertEqual(re.findall(r'--notation-width: (\d+)', html), ["512", "300"])
         self.assertNotIn("min-width:", html)
 
+    def test_each_song_initialises_its_configured_tempo(self) -> None:
+        original_read_text = Path.read_text
+        for score, expected in (
+            (SCORE, 120),
+            (SCORE.parent / "noche-de-paz.json", 72),
+        ):
+            with self.subTest(score=score.name):
+                contents = original_read_text(score, encoding="utf-8")
+                data = json.loads(contents)
+                self.assertEqual(data.get("tempoBpm"), expected)
+
+                def read_text(path: Path, *args, **kwargs):
+                    return contents if path == SCORE else original_read_text(path, *args, **kwargs)
+
+                with patch.object(Path, "read_text", read_text):
+                    app = AppTest.from_file(str(APP), default_timeout=15).run()
+                self.assertEqual(len(app.exception), 0)
+                self.assertEqual(app.slider(key="practice_tempo").value, expected)
+                self.assertTrue(any(f"{expected} BPM" in item.value for item in app.markdown))
+
+    def test_score_without_tempo_uses_the_fallback(self) -> None:
+        original_read_text = Path.read_text
+        data = json.loads(original_read_text(SCORE, encoding="utf-8"))
+        data.pop("tempoBpm", None)
+
+        def read_text(path: Path, *args, **kwargs):
+            return json.dumps(data) if path == SCORE else original_read_text(path, *args, **kwargs)
+
+        with patch.object(Path, "read_text", read_text):
+            app = AppTest.from_file(str(APP), default_timeout=15).run()
+        self.assertEqual(len(app.exception), 0)
+        self.assertEqual(app.slider(key="practice_tempo").value, 72)
+
     def test_score_tempo_initialises_the_practice_without_rounding(self) -> None:
         original_read_text = Path.read_text
         data = json.loads(original_read_text(SCORE, encoding="utf-8"))
@@ -612,26 +792,80 @@ class PracticeTests(unittest.TestCase):
 
     def test_metronome_and_volume_settings_are_saved(self) -> None:
         show_settings(self.app)
-        self.assertTrue(self.app.toggle(key="practice_metronome").value)
-        self.assertEqual(self.app.slider(key="practice_volume").value, 75)
-        self.app.toggle(key="practice_metronome").set_value(False).run()
-        self.app.slider(key="practice_volume").set_value(42).run()
-        self.assertFalse(self.app.session_state["practice_metronome_saved"])
-        self.assertEqual(self.app.session_state["practice_volume_saved"], 42)
-        show_practice(self.app)
-        show_settings(self.app)
         self.assertFalse(self.app.toggle(key="practice_metronome").value)
+        self.assertEqual(self.app.slider(key="practice_volume").value, 75)
+        self.assertFalse(self.app.toggle(key="practice_count_in").value)
+        self.assertTrue(self.app.toggle(key="practice_melody").value)
+        self.assertEqual(self.app.slider(key="practice_melody_volume").value, 60)
+        self.app.toggle(key="practice_metronome").set_value(True).run()
+        self.app.slider(key="practice_volume").set_value(42).run()
+        self.app.toggle(key="practice_count_in").set_value(True).run()
+        self.app.toggle(key="practice_melody").set_value(False).run()
+        self.app.slider(key="practice_melody_volume").set_value(37).run()
+        self.assertTrue(self.app.session_state["practice_metronome_saved"])
+        self.assertEqual(self.app.session_state["practice_volume_saved"], 42)
+        self.assertTrue(self.app.session_state["practice_count_in_saved"])
+        self.assertFalse(self.app.session_state["practice_melody_saved"])
+        self.assertEqual(self.app.session_state["practice_melody_volume_saved"], 37)
+        show_practice(self.app)
+        with patch("components.practice_player.render_player") as player:
+            self.app.run()
+        self.assertTrue(player.call_args.args[0]["countInEnabled"])
+        show_settings(self.app)
+        self.assertTrue(self.app.toggle(key="practice_metronome").value)
         self.assertEqual(self.app.slider(key="practice_volume").value, 42)
+        self.assertTrue(self.app.toggle(key="practice_count_in").value)
+        self.assertFalse(self.app.toggle(key="practice_melody").value)
+        self.assertEqual(self.app.slider(key="practice_melody_volume").value, 37)
         self.assertEqual(len(self.app.exception), 0)
 
-    def test_collapsing_settings_preserves_values(self) -> None:
+    def test_existing_sound_preferences_are_preserved(self) -> None:
+        app = AppTest.from_file(str(APP), default_timeout=15)
+        app.session_state["practice_metronome_saved"] = True
+        app.session_state["practice_count_in_saved"] = True
+        app.session_state["practice_melody_saved"] = False
+        app.run()
+        show_settings(app)
+        self.assertTrue(app.toggle(key="practice_metronome").value)
+        self.assertTrue(app.toggle(key="practice_count_in").value)
+        self.assertFalse(app.toggle(key="practice_melody").value)
+        self.assertEqual(len(app.exception), 0)
+
+    def test_piano_and_bass_settings_are_independent_and_saved(self) -> None:
+        show_settings(self.app)
+        self.assertFalse(self.app.toggle(key="practice_piano").value)
+        self.assertFalse(self.app.toggle(key="practice_bass").value)
+        self.assertEqual(self.app.slider(key="practice_piano_volume").value, 60)
+        self.assertEqual(self.app.slider(key="practice_bass_volume").value, 60)
+        self.app.toggle(key="practice_melody").set_value(False).run()
+        self.app.toggle(key="practice_piano").set_value(True).run()
+        self.app.slider(key="practice_piano_volume").set_value(35).run()
+        self.app.toggle(key="practice_bass").set_value(True).run()
+        self.app.slider(key="practice_bass_volume").set_value(47).run()
+        show_practice(self.app)
+        with patch("components.practice_player.render_player") as player:
+            self.app.run()
+        data = player.call_args.args[0]
+        self.assertFalse(data["melodyEnabled"])
+        self.assertTrue(data["pianoEnabled"])
+        self.assertEqual(data["pianoVolume"], 0.35)
+        self.assertTrue(data["bassEnabled"])
+        self.assertEqual(data["bassVolume"], 0.47)
+        show_settings(self.app)
+        self.assertTrue(self.app.toggle(key="practice_piano").value)
+        self.assertEqual(self.app.slider(key="practice_piano_volume").value, 35)
+        self.assertTrue(self.app.toggle(key="practice_bass").value)
+        self.assertEqual(self.app.slider(key="practice_bass_volume").value, 47)
+        self.assertEqual(len(self.app.exception), 0)
+
+    def test_settings_navigation_preserves_values(self) -> None:
         self.set_loop(1, 2)
         show_settings(self.app)
         self.app.checkbox(key="practice_duration").uncheck().run()
         self.app.button(key="practice_screen_toggle").click().run()
         self.app.slider(key="practice_tempo").set_value(88).run()
         show_settings(self.app)
-        self.assertTrue(any(item.label == "Sonido y avisos" for item in self.app.expander))
+        self.assertEqual(len(self.app.expander), 0)
         show_practice(self.app)
         self.assertEqual(self.app.session_state["practice_loop_bounds"], (1, 2))
         show_settings(self.app)
@@ -640,18 +874,36 @@ class PracticeTests(unittest.TestCase):
         self.assertEqual(self.app.slider(key="practice_tempo").value, 88)
         self.assertEqual(len(self.app.exception), 0)
 
+    def test_settings_show_display_and_sound_side_by_side(self) -> None:
+        show_settings(self.app)
+        settings = next(c for c in self.app.get("flex_container") if c.key == "practice-settings-page")
+        columns = list(settings.children[0].children.values())
+        self.assertEqual(len(columns), 2)
+        self.assertEqual(columns[0].radio[0].key, "practice_visibility")
+        self.assertEqual(len(columns[0].checkbox), 3)
+        self.assertEqual(columns[1].toggle[0].key, "practice_metronome")
+        self.assertEqual(columns[1].slider[0].key, "practice_volume")
+        self.assertEqual(columns[1].toggle[1].key, "practice_count_in")
+        self.assertEqual(columns[1].toggle[2].key, "practice_melody")
+        self.assertEqual(columns[1].slider[1].key, "practice_melody_volume")
+        self.assertEqual(columns[1].number_input[0].label, "Aviso (minutos)")
+        self.assertEqual(len(self.app.expander), 0)
+        self.assertFalse(any("Distribución del bloque" in item.value for item in self.app.markdown))
+        self.assertEqual(len(self.app.exception), 0)
+
     def test_simplified_header_and_guide(self) -> None:
         self.assertEqual(len(self.app.title), 0)
         header = next(item.value for item in self.app.get("html") if 'class="practice-header"' in item.value)
         self.assertIn("<h3>Stand by Me</h3>", header)
-        self.assertIn("Armónica C · 4/4 · Bucle 3–5 · Repetición sin límite", header)
+        measure_count = len(json.loads(SCORE.read_text(encoding="utf-8"))["measures"])
+        self.assertIn(f"Armónica C · 4/4 · Bucle 1–{measure_count} · Repetición sin límite", header)
         self.set_loop(4, 6)
         header = next(item.value for item in self.app.get("html") if 'class="practice-header"' in item.value)
         self.assertIn("Bucle 4–6", header)
         show_settings(self.app)
         self.assertEqual([radio.label for radio in self.app.radio], ["Compases en las cintas"])
         self.assertTrue(any(button.label == "← Volver" for button in self.app.button))
-        self.assertTrue(any(expander.label == "Sonido y avisos" for expander in self.app.expander))
+        self.assertEqual(len(self.app.expander), 0)
         show_practice(self.app)
         self.assertEqual(len(self.app.get("popover")), 0)
         visible_text = "\n".join(item.value for item in self.app.caption)

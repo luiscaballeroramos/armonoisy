@@ -3,7 +3,14 @@
     <button class="player-button player-play" data-action="play" type="button">▶ Play</button>
     <button class="player-button" data-action="pause" type="button" disabled>Ⅱ Pause</button>
     <button class="player-button" data-action="stop" type="button" disabled>■ Stop</button>
+    <button class="player-button player-preview" data-action="preview" type="button"
+      aria-label="Probar armónica en C: aspirar y soplar del 1 al 10"
+      title="Probar armónica en C: aspirar y soplar del 1 al 10">♪ Probar C</button>
+    <button class="player-button player-fallback" data-action="continue-without-melody" type="button"
+      aria-label="Continuar sin los instrumentos que no se han cargado"
+      title="Continuar sin los instrumentos que no se han cargado" hidden>
+      Continuar
+    </button>
   </div>
   <div class="player-status" role="status" aria-live="polite">Audio listo</div>
-  <div class="player-position" aria-live="off"></div>
 </div>

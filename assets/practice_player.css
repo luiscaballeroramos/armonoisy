@@ -1,35 +1,48 @@
 :host {
   display: block;
-  min-width: 248px;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  container-type: size;
   color: #42584f;
   font: inherit;
 }
 
+:host > div,
+:host > div > div {
+  height: 100%;
+  min-height: 0;
+}
+
 .practice-player {
-  display: grid;
-  grid-template-columns: auto minmax(74px, 1fr);
-  grid-template-rows: 1fr 1fr;
-  align-items: center;
-  gap: 2px 6px;
-  min-height: 100%;
+  position: relative;
+  width: 100%;
+  height: 100%;
 }
 
 .player-controls {
-  display: flex;
-  grid-row: 1 / span 2;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
   gap: 4px;
 }
 
 .player-button {
-  min-width: 52px;
-  min-height: 36px;
-  padding: 0 6px;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  padding: 0 2px;
   border: 1px solid #d5e0dc;
   border-radius: 6px;
   background: #fff;
   color: inherit;
   font: inherit;
-  font-size: 12px;
+  font-size: min(20px, max(12px, 3.6cqw), 45cqh);
   white-space: nowrap;
   cursor: pointer;
 }
@@ -38,6 +51,11 @@
   border-color: #216e5b;
   background: #216e5b;
   color: #fff;
+}
+
+.player-fallback {
+  grid-column: 4;
+  grid-row: 1;
 }
 
 .player-button:disabled {
@@ -50,46 +68,35 @@
   outline-offset: 2px;
 }
 
-.player-status,
-.player-position {
+.player-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
   overflow: hidden;
-  font-size: 12px;
-  line-height: 1.15;
-  text-overflow: ellipsis;
+  clip-path: inset(50%);
   white-space: nowrap;
 }
 
-.player-status {
-  align-self: end;
-}
-
-.player-position {
-  align-self: start;
-  color: #647d73;
-}
-
-@media (max-width: 560px) {
-  :host {
-    min-width: 232px;
-  }
-
-  .practice-player {
-    grid-template-columns: auto minmax(56px, 1fr);
-    gap: 2px 4px;
-  }
-
-  .player-controls {
-    gap: 2px;
-  }
-
-  .player-button {
-    min-width: 48px;
-    padding: 0 4px;
-    font-size: 11px;
-  }
-
-  .player-status,
-  .player-position {
-    font-size: 11px;
-  }
+.player-status.is-visible {
+  position: fixed;
+  z-index: 1000002;
+  top: 3.75rem;
+  right: 1rem;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: min(28rem, calc(100vw - 2rem));
+  height: auto;
+  padding: .5rem .75rem;
+  border: 1px solid #d5e0dc;
+  border-radius: 6px;
+  background: #fff;
+  box-shadow: 0 2px 6px #42584f40;
+  color: #42584f;
+  font-size: 14px;
+  line-height: 1.3;
+  clip-path: none;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  pointer-events: none;
 }

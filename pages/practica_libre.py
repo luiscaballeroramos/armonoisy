@@ -6,45 +6,13 @@ import json
 import math
 from pathlib import Path
 import re
-from typing import NamedTuple
 
 import streamlit as st
 
 from components.practice_player import render_player
+from practice_timeline import Event, build_loop_melody, parse_event
 from streamlit_template import Layout, render_layout
 
-class Event(NamedTuple):
-    pitch: str | None
-    tab_value: str | None
-    figure: str
-    dots: int
-    beats: Fraction
-    tuplet: tuple[int, int, str] | None
-    tie: str | None
-    bend: int
-
-    @property
-    def hole(self) -> int | None:
-        return int(self.tab_value.lstrip("+")) if self.tab_value else None
-
-    @property
-    def blow(self) -> bool:
-        return bool(self.tab_value and self.tab_value.startswith("+"))
-
-    @property
-    def tab(self) -> str:
-        return f"{self.hole}{'↑' if self.blow else '↓'}" if self.hole else "—"
-
-
-FIGURES = {
-    "whole": (Fraction(4), "𝅝"),
-    "half": (Fraction(2), "𝅗𝅥"),
-    "quarter": (Fraction(1), "♩"),
-    "eighth": (Fraction(1, 2), "♪"),
-    "16th": (Fraction(1, 4), "𝅘𝅥𝅯"),
-    "32nd": (Fraction(1, 8), "𝅘𝅥𝅰"),
-    "64th": (Fraction(1, 16), "𝅘𝅥𝅱"),
-}
 RESTS = {
     "whole": "𝄻", "half": "𝄼", "quarter": "𝄽", "eighth": "𝄾",
     "16th": "𝄿", "32nd": "𝅀", "64th": "𝅁",
@@ -54,57 +22,25 @@ MIN_EVENT_SPACING = 32
 TEMPO_MIN = 40
 TEMPO_MAX = 160
 TEMPO_DEFAULT = 72
+GUIDE_MIN_SHARE = 15
 PRACTICE_SETTING_DEFAULTS = {
     "practice_score": True,
     "practice_tabs": True,
     "practice_duration": True,
     "practice_visibility": "Solo bucle",
     "practice_height_map": 15,
-    "practice_height_guide": 10,
+    "practice_height_guide": GUIDE_MIN_SHARE,
     "practice_height_transport": 20,
-    "practice_metronome": True,
+    "practice_metronome": False,
     "practice_volume": 75,
+    "practice_count_in": False,
+    "practice_melody": True,
+    "practice_melody_volume": 60,
+    "practice_piano": False,
+    "practice_piano_volume": 60,
+    "practice_bass": False,
+    "practice_bass_volume": 60,
 }
-
-
-def parse_event(raw: dict) -> Event:
-    if "slur" in raw:
-        raise ValueError("Las ligaduras de expresión aún no están disponibles en esta vista.")
-    duration = raw["duration"]
-    if isinstance(duration, str):
-        dots = int(duration.startswith("dotted-"))
-        figure = duration.removeprefix("dotted-")
-    else:
-        figure = duration["figure"]
-        dots = duration["dots"]
-    if figure not in FIGURES or not isinstance(dots, int) or not 0 <= dots <= 3:
-        raise ValueError(f"Figura no admitida: {duration!r}")
-    beats = FIGURES[figure][0] * sum((Fraction(1, 2**i) for i in range(dots + 1)), Fraction())
-    tuplet = None
-    if "tuplet" in raw:
-        group = raw["tuplet"]
-        actual, normal, boundary = group["actual"], group["normal"], group["boundary"]
-        if (not isinstance(actual, int) or not isinstance(normal, int)
-                or actual < 2 or normal < 1 or boundary not in ("start", "continue", "stop")):
-            raise ValueError("Tresillo o grupo irregular inválido.")
-        beats *= Fraction(normal, actual)
-        tuplet = (actual, normal, boundary)
-    pitch = raw.get("pitch")
-    tab = raw.get("tab")
-    if raw.get("rest") is True:
-        if pitch is not None or tab is not None:
-            raise ValueError("Un silencio no puede tener altura o tablatura.")
-    elif not isinstance(pitch, str) or not re.fullmatch(r"[A-G](?:#|b)?[0-9]", pitch):
-        raise ValueError(f"Altura inválida: {pitch!r}")
-    if tab is not None and (not isinstance(tab, str) or not re.fullmatch(r"\+?(?:10|[1-9])", tab)):
-        raise ValueError(f"Tablatura inválida: {tab!r}")
-    tie = raw.get("tie")
-    if tie is not None and (pitch is None or tie not in ("start", "stop")):
-        raise ValueError("Ligadura inválida.")
-    bend = raw.get("bendSemitones", 0)
-    if not isinstance(bend, int) or not 0 <= bend <= 3:
-        raise ValueError("Bend inválido.")
-    return Event(pitch, tab, figure, dots, beats, tuplet, tie, bend)
 
 
 def load_score(path: Path) -> tuple[str, str, str, tuple[tuple[Event, ...], ...], int | float]:
@@ -154,10 +90,8 @@ PRACTICE_LAYOUT = Layout(
 )
 
 def initialise_state() -> None:
-    start = min(3, len(MEASURES))
-    end = min(5, len(MEASURES))
     defaults = {
-        "practice_loop_bounds": st.session_state.get("practice_loop", (start, end)),
+        "practice_loop_bounds": st.session_state.get("practice_loop", (1, len(MEASURES))),
         "practice_screen": "practice",
     }
     for key, value in defaults.items():
@@ -194,6 +128,13 @@ def save_player_tempo() -> None:
     st.session_state.practice_tempo_saved = tempo
     fraction = str(float(tempo)).partition(".")[2].rstrip("0")
     st.session_state.practice_tempo_precision = len(fraction)
+
+
+def repeat_player_measure() -> None:
+    measure = st.session_state["practice_player"].repeat_measure
+    if isinstance(measure, bool) or not isinstance(measure, int) or not 1 <= measure <= len(MEASURES):
+        raise ValueError("El reproductor envió un compás no válido para repetir.")
+    st.session_state.practice_loop_bounds = (measure, measure)
 
 
 def select_loop_measure(number: int) -> None:
@@ -338,15 +279,27 @@ def score_measure(events: tuple[Event, ...]) -> str:
 
 def score(measures: tuple[tuple[Event, ...], ...], first: int, last: int) -> str:
     width = STAFF_WIDTH * len(measures)
+    visible_width = STAFF_WIDTH * (last - first + 1)
     glyphs = []
     events_with_positions = []
+    note_markers = []
     for index, events in enumerate(measures):
         x_offset = index * STAFF_WIDTH
+        measure_number = index + 1
         glyphs.append(f'<g transform="translate({x_offset} 0)">{score_measure(events)}</g>')
-        events_with_positions.extend(
-            (event, x_offset + position + duration / 2)
-            for event, (position, duration) in zip(events, event_timing(events))
-        )
+        for event_index, (event, (position, duration)) in enumerate(
+            zip(events, event_timing(events))
+        ):
+            note_x = x_offset + position + duration / 2
+            events_with_positions.append((event, note_x))
+            if first <= measure_number <= last:
+                marker_x = 100 * (note_x - (first - 1) * STAFF_WIDTH) / visible_width
+                marker_y = 100 * pitch_y(event.pitch) / 135 if event.pitch else 100 * 75 / 135
+                note_markers.append(
+                    f'<span class="staff-event-marker" data-event-measure="{measure_number}" '
+                    f'data-event-index="{event_index}" style="left: {marker_x:.6f}%; '
+                    f'top: {marker_y:.6f}%" aria-hidden="true"></span>'
+                )
     ties = []
     for (event, x), (following, next_x) in zip(events_with_positions, events_with_positions[1:]):
         if (event.tie == "start" and event.pitch is not None
@@ -367,8 +320,10 @@ def score(measures: tuple[tuple[Event, ...], ...], first: int, last: int) -> str
     """
     encoded = b64encode(svg.encode("utf-8")).decode("ascii")
     return (
+        '<div class="staff-layer">'
         f'<img class="staff-image" src="data:image/svg+xml;base64,{encoded}" '
         f'alt="Partitura: compases {first} a {last}">'
+        f'{"".join(note_markers)}</div>'
     )
 
 
@@ -450,7 +405,8 @@ def render_music() -> None:
             for event, (position, duration) in zip(events, timing):
                 colour = "blow" if event.tab_value and event.blow else "draw" if event.tab_value else "rest"
                 symbols.append(
-                    f'<span class="{colour}" style="left: {100 * (position + duration / 2) / STAFF_WIDTH:.6f}%">{event.tab}'
+                    f'<span class="{colour}" '
+                    f'style="left: {100 * (position + duration / 2) / STAFF_WIDTH:.6f}%">{event.tab}'
                     f'</span>'
                 )
             tabs = (
@@ -489,6 +445,7 @@ def render_music() -> None:
         f'<div class="practice-row heading-row" aria-label="Compases">{"".join(headings)}</div>'
         f'{notation}'
         f'<div class="practice-row tabs-row" aria-label="Tablatura">{"".join(tablatures)}</div>'
+        f'<span class="practice-playhead" aria-hidden="true" hidden></span>'
         f'</div></div></div></div>'
     )
     render_guide()
@@ -505,6 +462,7 @@ def render_transport() -> None:
             gap="small", vertical_alignment="center",
         )
         start, end = st.session_state.practice_loop_bounds
+        melody_events = build_loop_melody(MEASURES, start, end)
         player_data = {
             "tempo": tempo,
             "startMeasure": start,
@@ -513,13 +471,40 @@ def render_transport() -> None:
             "meter": METER,
             "metronomeEnabled": st.session_state.practice_metronome_saved,
             "volume": st.session_state.practice_volume_saved / 100,
+            "countInEnabled": st.session_state.practice_count_in_saved,
+            "melodyEnabled": st.session_state.practice_melody_saved,
+            "melodyVolume": st.session_state.practice_melody_volume_saved / 100,
+            "pianoEnabled": st.session_state.practice_piano_saved,
+            "pianoVolume": st.session_state.practice_piano_volume_saved / 100,
+            "bassEnabled": st.session_state.practice_bass_saved,
+            "bassVolume": st.session_state.practice_bass_volume_saved / 100,
+            "melodyEvents": [
+                {
+                    "measureNumber": note.measure_number,
+                    "eventIndex": note.event_index,
+                    "startBeats": float(note.start_beats),
+                    "durationBeats": float(note.duration_beats),
+                    "pitch": note.pitch,
+                    "hole": MEASURES[note.measure_number - 1][note.event_index].hole,
+                    "blow": MEASURES[note.measure_number - 1][note.event_index].blow,
+                }
+                for note in melody_events
+            ],
             "measures": [
                 float(sum((event.beats for event in measure), Fraction()))
                 for measure in MEASURES
             ],
+            "measureEvents": [
+                [float(event.beats) for event in measure]
+                for measure in MEASURES
+            ],
         }
         with player:
-            render_player(player_data, on_tempo_change=save_player_tempo)
+            render_player(
+                player_data,
+                on_tempo_change=save_player_tempo,
+                on_repeat_measure_change=repeat_player_measure,
+            )
         lower.button(
             "−", key="tempo_down", on_click=change_tempo, args=(-1,),
             disabled=tempo - 1 < TEMPO_MIN, help="Bajar 1 BPM",
@@ -540,11 +525,12 @@ def render_transport() -> None:
 
 
 def render_guide() -> None:
-    holes = "".join(f"<span>{hole}</span>" for hole in range(1, 11))
+    holes = "".join(f'<span data-hole="{hole}">{hole}</span>' for hole in range(1, 11))
+    guide_label = f"Guía de armónica {INSTRUMENT}, agujeros del 1 al 10"
     st.html(
         f'<div class="practice-holes" role="img" '
-        f'aria-label="Guía de armónica {escape(INSTRUMENT, quote=True)}, '
-        f'agujeros del 1 al 10; indicación de nota pendiente de reproducción">{holes}</div>'
+        f'data-base-label="{escape(guide_label, quote=True)}" '
+        f'aria-label="{escape(guide_label, quote=True)}">{holes}</div>'
     )
 
 
@@ -552,13 +538,14 @@ def render_settings() -> None:
     for key in PRACTICE_SETTING_DEFAULTS:
         st.session_state[key] = st.session_state[f"{key}_saved"]
     with st.container(key="practice-settings-page"):
-        display, distribution = st.columns((1, 1.15), gap="large")
+        display, sound = st.columns(2, gap="small")
         with display:
-            st.markdown("**Visualización**")
+            st.markdown("**Ajustes**")
             st.radio(
                 "Compases en las cintas",
                 ("Todos", "Bucle y adyacentes", "Solo bucle"),
                 key="practice_visibility",
+                horizontal=True,
                 on_change=save_practice_setting,
                 args=("practice_visibility",),
             )
@@ -574,38 +561,49 @@ def render_settings() -> None:
                 "Fondos de duración", key="practice_duration",
                 on_change=save_practice_setting, args=("practice_duration",),
             )
-        with distribution:
-            st.markdown("**Distribución del bloque de música**")
-            selector, guide, transport = st.columns(3)
-            selector.number_input(
-                "Selector (%)", min_value=10, max_value=25, key="practice_height_map",
-                on_change=save_practice_setting, args=("practice_height_map",),
+        with sound:
+            st.markdown("**Sonidos**")
+            st.toggle(
+                "Metrónomo", key="practice_metronome",
+                on_change=save_practice_setting, args=("practice_metronome",),
             )
-            guide.number_input(
-                "Guía (%)", min_value=10, max_value=25, key="practice_height_guide",
-                on_change=save_practice_setting, args=("practice_height_guide",),
+            st.slider(
+                "Volumen", 0, 100, key="practice_volume",
+                on_change=save_practice_setting, args=("practice_volume",),
             )
-            transport.number_input(
-                "Controles (%)", min_value=10, max_value=25, key="practice_height_transport",
-                on_change=save_practice_setting, args=("practice_height_transport",),
+            st.toggle(
+                "Cuenta de entrada (1 compás)", key="practice_count_in",
+                help="Antes de empezar en A, cuenta un compás con el metrónomo.",
+                on_change=save_practice_setting, args=("practice_count_in",),
             )
-            notation_share = 100 - sum(st.session_state[f"{key}_saved"] for key in (
-                "practice_height_map", "practice_height_guide", "practice_height_transport",
-            ))
-            st.caption(f"Partitura / tablatura: {notation_share}% restante. Total: 100%.")
-        with st.expander("Sonido y avisos"):
-            sound, notice = st.columns(2)
-            with sound:
-                st.toggle(
-                    "Metrónomo", key="practice_metronome",
-                    on_change=save_practice_setting, args=("practice_metronome",),
-                )
-                st.slider(
-                    "Volumen", 0, 100, key="practice_volume",
-                    on_change=save_practice_setting, args=("practice_volume",),
-                )
-            with notice:
-                st.number_input("Aviso (minutos)", min_value=1, value=15, disabled=True)
+            st.toggle(
+                "Melodía guía", key="practice_melody",
+                help="Melodía con sonido de armónica; piano y bajo se controlan por separado.",
+                on_change=save_practice_setting, args=("practice_melody",),
+            )
+            st.slider(
+                "Volumen de melodía", 0, 100, key="practice_melody_volume",
+                on_change=save_practice_setting, args=("practice_melody_volume",),
+            )
+            st.toggle(
+                "Piano (melodía)", key="practice_piano",
+                help="Reproduce las notas de la partitura con piano.",
+                on_change=save_practice_setting, args=("practice_piano",),
+            )
+            st.slider(
+                "Volumen de piano", 0, 100, key="practice_piano_volume",
+                on_change=save_practice_setting, args=("practice_piano_volume",),
+            )
+            st.toggle(
+                "Bajo (melodía grave)", key="practice_bass",
+                help="Reproduce la melodía tres octavas más grave; no genera acordes.",
+                on_change=save_practice_setting, args=("practice_bass",),
+            )
+            st.slider(
+                "Volumen de bajo", 0, 100, key="practice_bass_volume",
+                on_change=save_practice_setting, args=("practice_bass_volume",),
+            )
+            st.number_input("Aviso (minutos)", min_value=1, value=15, disabled=True)
 
 
 def render_header() -> None:
@@ -640,7 +638,7 @@ def render() -> None:
     initialise_state()
     stylesheet = Path(__file__).resolve().parents[1] / "assets" / "practica.css"
     map_share = st.session_state.practice_height_map_saved
-    guide_share = st.session_state.practice_height_guide_saved
+    guide_share = max(GUIDE_MIN_SHARE, st.session_state.practice_height_guide_saved)
     transport_share = st.session_state.practice_height_transport_saved
     rows = (map_share, 100 - map_share - guide_share - transport_share, guide_share, transport_share)
     row_css = " ".join(f"minmax(0, {share}fr)" for share in rows)
