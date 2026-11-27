@@ -80,7 +80,7 @@ async function loadHarmonicaSamples(context) {
   if (!samplesPromise) {
     samplesPromise = Promise.all(Object.entries(HARMONICA_SAMPLE_FILES).map(async ([pitch, definition]) => {
       const {filename, frequency, blow} = definition;
-      const response = await fetch(`/app/static/harmonica/${filename}`);
+      const response = await fetch(`app/static/harmonica/${filename}`);
       if (!response.ok) {
         throw new Error(`${filename}: HTTP ${response.status}`);
       }
@@ -102,7 +102,7 @@ async function loadAccompanimentSamples(context, instrument) {
   let samplesPromise = cache.get(context);
   if (!samplesPromise) {
     samplesPromise = Promise.all(ACCOMPANIMENT_INSTRUMENTS[instrument].files.map(async ({filename, frequency}) => {
-      const response = await fetch(`/app/static/${instrument}/${filename}`);
+      const response = await fetch(`app/static/${instrument}/${filename}`);
       if (!response.ok) {
         throw new Error(`${filename}: HTTP ${response.status}`);
       }

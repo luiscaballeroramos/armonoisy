@@ -69,6 +69,7 @@ function fakeGuide() {
 
 function harness({failedFile = null, delayedFile = null} = {}) {
   const requests = [];
+  const requestUrls = [];
   const contexts = [];
   const frames = new Map();
   const guide = fakeGuide();
@@ -131,8 +132,9 @@ function harness({failedFile = null, delayedFile = null} = {}) {
     fetch: async (url) => {
       const filename = url.split("/").pop();
       requests.push(filename);
+      requestUrls.push(url);
       if (filename === delayedFile) await waiting;
-      const relativePath = url.replace(/^\/app\/static\//, "").split("/");
+      const relativePath = url.replace(/^app\/static\//, "").split("/");
       const missing = filename === unavailable
         || !fs.existsSync(path.join(root, "static", ...relativePath));
       return {ok: !missing, status: missing ? 404 : 200, arrayBuffer: async () => ({filename})};
@@ -149,7 +151,7 @@ function harness({failedFile = null, delayedFile = null} = {}) {
   };
   vm.runInNewContext(`${script}\nthis.playerTests = {createInstance, loadHarmonicaSamples};`, sandbox);
   return {
-    ...sandbox.playerTests, AudioContext, contexts, requests, guide,
+    ...sandbox.playerTests, AudioContext, contexts, requests, requestUrls, guide,
     makeAvailable() { unavailable = null; },
     release() { release(); },
     tick() {
@@ -426,6 +428,25 @@ test("a missing draw sample is reported and the next load can retry", async () =
   h.makeAvailable();
   await h.loadHarmonicaSamples(context);
   assert.equal(h.requests.filter((name) => name === missing).length, 2);
+});
+
+test("all instruments load samples relative to the Streamlit app path", async () => {
+  const h = harness();
+  const ui = controls();
+  const event = {
+    pitch: "C5", hole: 4, blow: true, eventIndex: 0, measureNumber: 1,
+    startBeats: 0, durationBeats: 1,
+  };
+  h.createInstance(ui.parent, {
+    ...config([event]), pianoEnabled: true, bassEnabled: true,
+  }, () => {});
+  await new Promise(setImmediate);
+  assert.equal(h.requestUrls.length, audioFiles.length + pianoFiles.length + bassFiles.length);
+  for (const url of h.requestUrls) {
+    assert.match(url, /^app\/static\/(harmonica|piano|bass)\//);
+    assert.ok(new URL(url, "https://example.test/~/+/").pathname.startsWith("/~/+/app/static/"));
+    assert.ok(new URL(url, "http://localhost:8501/").pathname.startsWith("/app/static/"));
+  }
 });
 
 test("piano and bass play the score together without requiring harmonica samples", async () => {
