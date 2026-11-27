@@ -1,4 +1,5 @@
 from base64 import b64decode
+from decimal import Decimal
 import json
 import re
 import unittest
@@ -13,6 +14,16 @@ APP = Path(__file__).resolve().parents[1] / "app.py"
 SCORE = APP.parent / "partituras" / "formateadas" / "stand-by-me.json"
 
 
+def show_settings(app: AppTest) -> None:
+    if app.session_state["practice_screen"] != "settings":
+        app.button(key="practice_screen_toggle").click().run()
+
+
+def show_practice(app: AppTest) -> None:
+    if app.session_state["practice_screen"] != "practice":
+        app.button(key="practice_screen_toggle").click().run()
+
+
 class PracticeTests(unittest.TestCase):
     def setUp(self) -> None:
         self.app = AppTest.from_file(str(APP), default_timeout=15).run()
@@ -21,6 +32,31 @@ class PracticeTests(unittest.TestCase):
     def set_loop(self, start: int, end: int) -> None:
         self.app.session_state["practice_loop_bounds"] = (start, end)
         self.app.run()
+
+    def test_screen_layout_preserves_frame_when_notation_is_hidden(self) -> None:
+        layout_css = next(
+            item.value for item in self.app.get("html")
+            if "grid-template-areas:" in item.value
+        )
+        self.assertIn("height: calc(100dvh - 5.75rem)", layout_css)
+        self.assertIn("grid-template-rows: minmax(0, 1fr)", layout_css)
+        self.assertIn("overflow: auto", layout_css)
+        styles = next(item.value for item in self.app.get("html") if "practice-score-container" in item.value and "<style>" in item.value)
+        self.assertIn('[data-testid="stMain"] .st-key-practice-shell { min-height: 0; }', styles)
+        show_settings(self.app)
+        self.app.checkbox(key="practice_score").uncheck().run()
+        show_practice(self.app)
+        self.assertEqual(len(self.app.exception), 0)
+        self.assertIn(layout_css, [item.value for item in self.app.get("html")])
+        shell = next(c for c in self.app.get("flex_container") if c.key == "practice-shell")
+        self.assertIn('class="practice-header"', shell.children[0].value)
+        grid = next(child for child in shell.children.values() if child.key == "practice-grid")
+        self.assertEqual(grid.key, "practice-grid")
+        self.assertEqual(
+            [region.key for region in grid.children.values()],
+            ["practice-music", "practice-settings"],
+        )
+        self.assertEqual(self.app.slider(key="practice_tempo").value, 72)
 
     def test_loop_resize_and_move(self) -> None:
         self.app.button(key="map_measure_1").click().run()
@@ -34,6 +70,58 @@ class PracticeTests(unittest.TestCase):
         self.app.button(key="map_measure_4").click().run()
         self.assertEqual(self.app.session_state["practice_loop_bounds"], (5, 6))
         self.assertEqual(len(self.app.exception), 0)
+
+    def test_music_percentages_update_without_resetting_practice(self) -> None:
+        self.set_loop(2, 6)
+        self.app.slider(key="practice_tempo").set_value(88).run()
+        self.app.button(key="practice_screen_toggle").click().run()
+        self.assertEqual(self.app.session_state["practice_screen"], "settings")
+        for selector, guide, transport in ((20, 15, 25), (25, 25, 25), (10, 10, 10)):
+            with self.subTest(shares=(selector, guide, transport)):
+                self.app.number_input(key="practice_height_map").set_value(selector)
+                self.app.number_input(key="practice_height_guide").set_value(guide)
+                self.app.number_input(key="practice_height_transport").set_value(transport)
+                self.app.run()
+                notation = 100 - selector - guide - transport
+                styles = next(item.value for item in self.app.get("html") if "--music-rows:" in item.value)
+                rows = " ".join(f"minmax(0, {value}fr)" for value in (selector, notation, guide, transport))
+                self.assertIn(f"--music-rows: {rows}", styles)
+                self.assertTrue(any(f"{notation}% restante" in item.value for item in self.app.caption))
+                self.assertEqual(self.app.session_state["practice_loop_bounds"], (2, 6))
+                self.assertEqual(self.app.session_state["practice_tempo_saved"], 88)
+                self.assertEqual(len(self.app.exception), 0)
+        self.app.button(key="practice_screen_toggle").click().run()
+        self.assertEqual(self.app.session_state["practice_screen"], "practice")
+        show_settings(self.app)
+        self.app.checkbox(key="practice_score").uncheck().run()
+        show_practice(self.app)
+        styles = next(item.value for item in self.app.get("html") if "--music-rows:" in item.value)
+        self.assertIn("--music-rows: minmax(0, 10fr) minmax(0, 70fr) minmax(0, 10fr) minmax(0, 10fr)", styles)
+
+    def test_settings_screen_preserves_practice_state(self) -> None:
+        self.set_loop(4, 7)
+        self.app.slider(key="practice_tempo").set_value(96).run()
+        show_settings(self.app)
+        self.app.checkbox(key="practice_duration").uncheck().run()
+        self.app.radio(key="practice_visibility").set_value("Solo bucle").run()
+        self.app.number_input(key="practice_height_map").set_value(18).run()
+        self.app.button(key="practice_screen_toggle").click().run()
+        self.assertEqual(self.app.session_state["practice_screen"], "practice")
+        self.assertEqual(self.app.session_state["practice_loop_bounds"], (4, 7))
+        self.assertEqual(self.app.session_state["practice_tempo_saved"], 96)
+        self.assertEqual(self.app.slider(key="practice_tempo").value, 96)
+        show_settings(self.app)
+        self.assertEqual(self.app.session_state["practice_screen"], "settings")
+        self.assertTrue(any(item.key == "practice-settings-page" for item in self.app.get("flex_container")))
+        self.assertFalse(self.app.checkbox(key="practice_duration").value)
+        self.assertEqual(self.app.radio(key="practice_visibility").value, "Solo bucle")
+        self.assertEqual(self.app.number_input(key="practice_height_map").value, 18)
+        show_practice(self.app)
+        self.assertEqual(self.app.session_state["practice_screen"], "practice")
+        self.assertEqual(self.app.slider(key="practice_tempo").value, 96)
+        self.assertIn("Bucle 4–7", next(
+            item.value for item in self.app.get("html") if 'class="practice-header"' in item.value
+        ))
 
     def test_clicking_loop_endpoints_removes_them_until_one_remains(self) -> None:
         self.set_loop(3, 5)
@@ -127,8 +215,10 @@ class PracticeTests(unittest.TestCase):
                          ["4↑", "4↓", "—", "—"])
         self.assertEqual(re.findall(r'<span class="([^"]+)"', bg_cell.group()),
                          ["blow-0", "draw-1", "rest", "unknown"])
+        show_settings(app)
         app.checkbox(key="practice_duration").uncheck().run()
         app.checkbox(key="practice_score").uncheck().run()
+        show_practice(app)
         html = next(item.value for item in app.get("html") if 'class="practice-score"' in item.value)
         self.assertIn(">4↑</span>", html)
         self.assertIn(">4↓</span>", html)
@@ -150,7 +240,9 @@ class PracticeTests(unittest.TestCase):
             r'data:image/svg\+xml;base64,([^"]+)', html
         )]
         self.assertEqual(sum(score.count("𝄞") for score in scores), 1)
+        show_settings(self.app)
         self.app.checkbox(key="practice_score").uncheck().run()
+        show_practice(self.app)
         html = next(item.value for item in self.app.get("html") if 'class="practice-score"' in item.value)
         self.assertIn('class="practice-signature"', html)
         self.assertNotIn('class="signature-image"', html)
@@ -241,20 +333,23 @@ class PracticeTests(unittest.TestCase):
             self.assertAlmostEqual(tab, point, delta=0.1)
             self.assertAlmostEqual(start + width / 2, point, delta=0.1)
             self.assertAlmostEqual(width, expected_width, delta=0.01)
-        cards = re.findall(r'<article class="measure .*?</article>', html, re.DOTALL)
+        single_background = re.search(r'<div class="measure-background" data-measure="2".*?</div>', html)
+        assert single_background is not None
         single_bar = re.search(
-            r'<span class="" style="left: ([0-9.]+)%; width: ([0-9.]+)%"', cards[1]
+            r'<span class="blow-0" style="left: ([0-9.]+)%; width: ([0-9.]+)%"', single_background.group()
         )
         assert single_bar is not None
-        self.assertAlmostEqual(float(single_bar.group(1)) * 3, 70, delta=0.01)
-        self.assertAlmostEqual(float(single_bar.group(2)) * 3, 210, delta=0.01)
+        self.assertAlmostEqual(float(single_bar.group(1)) * 3, 0, delta=0.01)
+        self.assertAlmostEqual(float(single_bar.group(2)) * 3, 300, delta=0.01)
 
         with patch.object(Path, "read_text", read_text):
+            show_settings(app)
             app.checkbox(key="practice_score").uncheck().run()
+            show_practice(app)
         hidden_html = next(item.value for item in app.get("html") if 'class="practice-score"' in item.value)
-        hidden_card = re.search(r'<article class="measure .*?</article>', hidden_html, re.DOTALL)
+        hidden_card = re.search(r'<div class="tabs measure-cell [^"]+" data-measure="1".*?</div>', hidden_html)
         assert hidden_card is not None
-        self.assertNotIn('class="staff-image"', hidden_card.group())
+        self.assertNotIn('class="staff-image"', hidden_html)
         self.assertEqual(
             re.findall(r'<span class="(?:blow|draw|rest)" style="left: ([0-9.]+)%"', hidden_card.group()),
             [f"{value / 3:.6f}" for value in tabs],
@@ -270,20 +365,25 @@ class PracticeTests(unittest.TestCase):
             self.assertIn(f'practice-row {row}', html)
         self.assertNotIn("navigation-row", html)
         self.assertNotIn("measure-navigation", html)
-        self.assertLess(html.index('class="practice-signature"'), html.index('class="practice-score"'))
+        self.assertLess(html.index('class="practice-score"'), html.index('class="practice-signature"'))
+        self.assertLess(html.index('class="practice-signature"'), html.index('class="practice-row heading-row"'))
         self.assertIn('class="background-row"', html)
         self.assertNotIn('duration-row', html)
         for number in range(1, len(json.loads(SCORE.read_text(encoding="utf-8"))["measures"]) + 1):
             self.assertEqual(html.count(f'data-measure="{number}"'), 3)
         self.assertEqual(html.count('class="staff-image"'), 1)
+        show_settings(self.app)
         self.app.checkbox(key="practice_score").uncheck().run()
+        show_practice(self.app)
         html = next(item.value for item in self.app.get("html") if 'class="practice-score"' in item.value)
-        self.assertIn("--signature-width: 70px", html)
+        self.assertIn('class="practice-signature"', html)
         self.assertIn('class="tabs measure-cell ', html)
         self.assertNotIn('class="staff-image"', html)
 
     def test_duration_background_can_be_hidden_without_losing_divisions(self) -> None:
+        show_settings(self.app)
         self.app.checkbox(key="practice_duration").uncheck().run()
+        show_practice(self.app)
         html = next(item.value for item in self.app.get("html") if 'class="practice-score"' in item.value)
         backgrounds = re.findall(r'<div class="measure-background" data-measure="\d+" data-selected="(?:true|false)">(.*?)</div>', html)
         self.assertEqual(len(backgrounds), len(json.loads(SCORE.read_text(encoding="utf-8"))["measures"]))
@@ -361,6 +461,103 @@ class PracticeTests(unittest.TestCase):
         self.assertEqual(re.findall(r'--notation-width: (\d+)', html), ["512", "300"])
         self.assertNotIn("min-width:", html)
 
+    def test_score_tempo_initialises_the_practice_without_rounding(self) -> None:
+        original_read_text = Path.read_text
+        data = json.loads(original_read_text(SCORE, encoding="utf-8"))
+
+        def read_text(path: Path, *args, **kwargs):
+            return json.dumps(data) if path == SCORE else original_read_text(path, *args, **kwargs)
+
+        with patch.object(Path, "read_text", read_text):
+            for tempo in (40, 40.5, 72.12345678901234, 91.25, 127.96, 159.5, 160):
+                with self.subTest(tempo=tempo):
+                    data["tempoBpm"] = tempo
+                    app = AppTest.from_file(str(APP), default_timeout=15).run()
+                    self.assertEqual(len(app.exception), 0)
+                    slider = app.slider(key="practice_tempo")
+                    self.assertEqual(slider.value, tempo)
+                    self.assertEqual(Decimal(str(tempo)) % Decimal(str(slider.proto.step)), 0)
+                    self.assertEqual(app.session_state["practice_tempo_saved"], tempo)
+                    self.assertTrue(any(f"{tempo} BPM" in item.value for item in app.markdown))
+                    if tempo == 40.5:
+                        self.assertTrue(app.button(key="tempo_down").disabled)
+                        app.button(key="tempo_up").click().run()
+                        self.assertEqual(app.slider(key="practice_tempo").value, 41.5)
+                    elif tempo == 159.5:
+                        self.assertTrue(app.button(key="tempo_up").disabled)
+                        app.button(key="tempo_down").click().run()
+                        self.assertEqual(app.slider(key="practice_tempo").value, 158.5)
+                    elif tempo == 91.25:
+                        app.button(key="tempo_up").click().run()
+                        show_settings(app)
+                        show_practice(app)
+                        self.assertEqual(app.slider(key="practice_tempo").value, 92.25)
+                    elif tempo == 127.96:
+                        app.button(key="tempo_up").click().run()
+                        self.assertEqual(app.slider(key="practice_tempo").value, 128.96)
+
+    def test_score_tempo_preserves_an_existing_session_value(self) -> None:
+        original_read_text = Path.read_text
+        data = json.loads(original_read_text(SCORE, encoding="utf-8"))
+        data["tempoBpm"] = 100
+
+        def read_text(path: Path, *args, **kwargs):
+            return json.dumps(data) if path == SCORE else original_read_text(path, *args, **kwargs)
+
+        with patch.object(Path, "read_text", read_text):
+            app = AppTest.from_file(str(APP), default_timeout=15)
+            app.session_state["practice_tempo"] = 88
+            app.run()
+        self.assertEqual(len(app.exception), 0)
+        self.assertEqual(app.slider(key="practice_tempo").value, 88)
+
+    def test_out_of_range_score_tempo_requires_an_explicit_choice(self) -> None:
+        original_read_text = Path.read_text
+        original_score = original_read_text(SCORE, encoding="utf-8")
+        data = json.loads(original_score)
+
+        def read_text(path: Path, *args, **kwargs):
+            return json.dumps(data) if path == SCORE else original_read_text(path, *args, **kwargs)
+
+        with patch.object(Path, "read_text", read_text):
+            for tempo in (39.9, 160.1):
+                with self.subTest(tempo=tempo):
+                    data["tempoBpm"] = tempo
+                    app = AppTest.from_file(str(APP), default_timeout=15)
+                    app.session_state["practice_tempo_saved"] = 88
+                    app.run()
+                    self.assertEqual(len(app.exception), 0)
+                    self.assertTrue(any(
+                        f"{tempo}" in item.value and "40" in item.value and "160" in item.value
+                        for item in app.warning
+                    ))
+                    self.assertEqual(len(app.slider), 0)
+                    app.number_input(key="practice_tempo_choice").set_value(85)
+                    app.button(key="confirm_score_tempo").click().run()
+                    self.assertEqual(len(app.exception), 0)
+                    self.assertEqual(app.slider(key="practice_tempo").value, 85)
+                    self.assertEqual(app.session_state["practice_tempo_saved"], 85)
+                    show_settings(app)
+                    show_practice(app)
+                    self.assertEqual(app.slider(key="practice_tempo").value, 85)
+        self.assertEqual(original_read_text(SCORE, encoding="utf-8"), original_score)
+
+    def test_invalid_score_tempo_reports_an_error(self) -> None:
+        original_read_text = Path.read_text
+        data = json.loads(original_read_text(SCORE, encoding="utf-8"))
+
+        def read_text(path: Path, *args, **kwargs):
+            return json.dumps(data) if path == SCORE else original_read_text(path, *args, **kwargs)
+
+        with patch.object(Path, "read_text", read_text):
+            for tempo in ("80", None, True, float("nan")):
+                with self.subTest(tempo=tempo):
+                    data["tempoBpm"] = tempo
+                    app = AppTest.from_file(str(APP), default_timeout=15).run()
+                    self.assertEqual(len(app.exception), 0)
+                    self.assertTrue(any("tempo" in item.value.lower() for item in app.error))
+                    self.assertEqual(len(app.slider), 0)
+
     def test_tempo_buttons_follow_slider_and_limits(self) -> None:
         self.app.slider(key="practice_tempo").set_value(40).run()
         self.assertTrue(self.app.button(key="tempo_down").disabled)
@@ -376,21 +573,28 @@ class PracticeTests(unittest.TestCase):
         transport = next(c for c in self.app.get("flex_container") if c.key == "practice-transport")
         row = transport.children[0]
         columns = list(row.children.values())
-        self.assertEqual(len(columns), 8)
-        self.assertEqual([column.button[0].label for column in columns[:3]], ["▶ Play", "Ⅱ Pause", "■ Stop"])
-        self.assertEqual(columns[3].caption[0].value, "Audio pendiente")
-        self.assertEqual(columns[4].button[0].key, "tempo_down")
-        self.assertIn("BPM", columns[5].markdown[0].value)
-        self.assertEqual(columns[6].button[0].key, "tempo_up")
-        self.assertEqual(columns[7].slider[0].key, "practice_tempo")
+        self.assertEqual(len(columns), 5)
+        self.assertEqual(columns[0].button, [])
+        self.assertEqual(columns[0].slider, [])
+        self.assertEqual(columns[1].button[0].key, "tempo_down")
+        self.assertIn("BPM", columns[2].markdown[0].value)
+        self.assertEqual(columns[3].button[0].key, "tempo_up")
+        self.assertEqual(columns[4].slider[0].key, "practice_tempo")
+        self.assertEqual(len(self.app.exception), 0)
 
     def test_collapsing_settings_preserves_values(self) -> None:
         self.set_loop(1, 2)
+        show_settings(self.app)
         self.app.checkbox(key="practice_duration").uncheck().run()
-        self.assertTrue(any(item.label == "Ajustes" for item in self.app.expander))
+        self.app.button(key="practice_screen_toggle").click().run()
         self.app.slider(key="practice_tempo").set_value(88).run()
+        show_settings(self.app)
+        self.assertTrue(any(item.label == "Sonido y avisos · próximamente" for item in self.app.expander))
+        show_practice(self.app)
         self.assertEqual(self.app.session_state["practice_loop_bounds"], (1, 2))
+        show_settings(self.app)
         self.assertFalse(self.app.checkbox(key="practice_duration").value)
+        show_practice(self.app)
         self.assertEqual(self.app.slider(key="practice_tempo").value, 88)
         self.assertEqual(len(self.app.exception), 0)
 
@@ -402,10 +606,11 @@ class PracticeTests(unittest.TestCase):
         self.set_loop(4, 6)
         header = next(item.value for item in self.app.get("html") if 'class="practice-header"' in item.value)
         self.assertIn("Bucle 4–6", header)
-        self.assertEqual(
-            [radio.label for radio in next(e for e in self.app.expander if e.label == "Ajustes").radio],
-            ["Compases en las cintas"],
-        )
+        show_settings(self.app)
+        self.assertEqual([radio.label for radio in self.app.radio], ["Compases en las cintas"])
+        self.assertTrue(any(button.label == "← Volver" for button in self.app.button))
+        self.assertTrue(any(expander.label == "Sonido y avisos · próximamente" for expander in self.app.expander))
+        show_practice(self.app)
         self.assertEqual(len(self.app.get("popover")), 0)
         visible_text = "\n".join(item.value for item in self.app.caption)
         self.assertNotIn("ARMONOISY · Primera interfaz", visible_text)
@@ -446,21 +651,41 @@ class PracticeTests(unittest.TestCase):
         self.assertIn('data-measure="2" data-selected="true"', html)
         self.assertNotRegex(html, r'class="tabs measure-cell context" data-measure="2"')
 
+    def test_measure_headings_show_only_numbers(self) -> None:
+        for bounds in ((3, 5), (4, 4)):
+            with self.subTest(bounds=bounds):
+                self.set_loop(*bounds)
+                html = next(item.value for item in self.app.get("html") if 'class="practice-score"' in item.value)
+                headings = [
+                    ElementTree.fromstring(fragment)
+                    for fragment in re.findall(r'<div class="measure-heading\b[^>]*>.*?</div>', html)
+                ]
+                self.assertEqual(len(headings), 25)
+                for heading in headings:
+                    self.assertEqual("".join(heading.itertext()), heading.attrib["data-measure"])
+                selected = headings[bounds[0] - 1]
+                self.assertIn("En bucle", selected.attrib["aria-label"])
+                self.assertIn("Contexto", headings[0].attrib["aria-label"])
+
     def test_visibility_modes_and_song_boundaries(self) -> None:
         self.set_loop(3, 5)
+        show_settings(self.app)
         for mode, expected in (
             ("Todos", list(range(1, 26))),
             ("Bucle y adyacentes", [2, 3, 4, 5, 6]),
             ("Solo bucle", [3, 4, 5]),
         ):
             self.app.radio(key="practice_visibility").set_value(mode).run()
+            show_practice(self.app)
             html = next(item.value for item in self.app.get("html") if 'class="practice-score"' in item.value)
             self.assertEqual([int(n) for n in re.findall(r'id="practice-measure-(\d+)"', html)], expected)
             image = re.search(r'<img class="staff-image" src="data:image/svg\+xml;base64,([^"]+)', html)
             assert image is not None
             svg = ElementTree.fromstring(b64decode(image.group(1)))
             self.assertEqual(svg.attrib["viewBox"], f"{(expected[0] - 1) * 300} 0 {len(expected) * 300} 135")
+            show_settings(self.app)
         self.app.radio(key="practice_visibility").set_value("Bucle y adyacentes").run()
+        show_practice(self.app)
         self.set_loop(1, 1)
         html = next(item.value for item in self.app.get("html") if 'class="practice-score"' in item.value)
         self.assertEqual(re.findall(r'id="practice-measure-(\d+)"', html), ["1", "2"])
@@ -471,9 +696,10 @@ class PracticeTests(unittest.TestCase):
     def test_view_changes_keep_practice_settings_and_one_notation(self) -> None:
         self.app.slider(key="practice_tempo").set_value(88).run()
         self.set_loop(1, 2)
+        show_settings(self.app)
         self.app.checkbox(key="practice_score").uncheck().run()
         self.assertTrue(self.app.checkbox(key="practice_tabs").disabled)
-        self.assertEqual(self.app.slider(key="practice_tempo").value, 88)
+        self.assertEqual(self.app.session_state["practice_tempo_saved"], 88)
         self.assertEqual(self.app.session_state["practice_loop_bounds"], (1, 2))
         self.app.checkbox(key="practice_score").check().run()
         self.app.checkbox(key="practice_tabs").uncheck().run()

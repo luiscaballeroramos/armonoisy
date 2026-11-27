@@ -1,4 +1,5 @@
 from base64 import b64encode
+from decimal import Decimal
 from fractions import Fraction
 from html import escape
 import json
@@ -9,6 +10,7 @@ from typing import NamedTuple
 
 import streamlit as st
 
+from components.practice_player import render_player
 from streamlit_template import Layout, render_layout
 
 class Event(NamedTuple):
@@ -49,6 +51,18 @@ RESTS = {
 }
 STAFF_WIDTH = 300
 MIN_EVENT_SPACING = 32
+TEMPO_MIN = 40
+TEMPO_MAX = 160
+TEMPO_DEFAULT = 72
+PRACTICE_SETTING_DEFAULTS = {
+    "practice_score": True,
+    "practice_tabs": True,
+    "practice_duration": True,
+    "practice_visibility": "Todos",
+    "practice_height_map": 15,
+    "practice_height_guide": 10,
+    "practice_height_transport": 20,
+}
 
 
 def parse_event(raw: dict) -> Event:
@@ -91,15 +105,19 @@ def parse_event(raw: dict) -> Event:
     return Event(pitch, tab, figure, dots, beats, tuplet, tie, bend)
 
 
-def load_score(path: Path) -> tuple[str, str, str, tuple[tuple[Event, ...], ...]]:
+def load_score(path: Path) -> tuple[str, str, str, tuple[tuple[Event, ...], ...], int | float]:
     data = json.loads(path.read_text(encoding="utf-8"))
     if data["version"] != 3:
         raise ValueError("La partitura debe usar el formato JSON v3.")
     title = data["title"]
     instrument = data["instrument"]["key"]
     meter = data["timeSignature"]
+    tempo = data.get("tempoBpm", TEMPO_DEFAULT)
     if not all(isinstance(value, str) and value for value in (title, instrument, meter)):
         raise ValueError("Faltan el título, la armónica o el compás.")
+    if (isinstance(tempo, bool) or not isinstance(tempo, (int, float))
+            or isinstance(tempo, float) and not math.isfinite(tempo)):
+        raise ValueError("El tempo de la partitura debe ser un número válido.")
     measures = []
     for number, measure in enumerate(data["measures"], 1):
         if measure["number"] != number or not measure["events"]:
@@ -118,11 +136,11 @@ def load_score(path: Path) -> tuple[str, str, str, tuple[tuple[Event, ...], ...]
             index == 0 or events[index - 1].tie != "start" or events[index - 1].pitch != event.pitch
         ):
             raise ValueError("La ligadura no tiene una nota inicial válida.")
-    return title, instrument, meter, tuple(measures)
+    return title, instrument, meter, tuple(measures), tempo
 
 
 try:
-    TITLE, INSTRUMENT, METER, MEASURES = load_score(
+    TITLE, INSTRUMENT, METER, MEASURES, SCORE_TEMPO = load_score(
         Path(__file__).resolve().parents[1] / "partituras" / "formateadas" / "stand-by-me.json"
     )
 except (OSError, ValueError, KeyError, TypeError) as exc:
@@ -130,7 +148,7 @@ except (OSError, ValueError, KeyError, TypeError) as exc:
     st.stop()
 
 PRACTICE_LAYOUT = Layout(
-    (("music",), ("settings",)), (1,), (1, 1), min_height=0,
+    (("music", "settings"),), (1, 1), (1,), min_height=0,
 )
 
 def initialise_state() -> None:
@@ -138,15 +156,42 @@ def initialise_state() -> None:
     end = min(5, len(MEASURES))
     defaults = {
         "practice_loop_bounds": st.session_state.get("practice_loop", (start, end)),
-        "practice_tempo": 72,
-        "practice_score": True,
-        "practice_tabs": True,
-        "practice_duration": True,
-        "practice_visibility": "Todos",
+        "practice_screen": "practice",
     }
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
+    if "practice_tempo_saved" not in st.session_state:
+        st.session_state.practice_tempo_saved = st.session_state.get("practice_tempo", SCORE_TEMPO)
+    if "practice_tempo" not in st.session_state:
+        st.session_state.practice_tempo = st.session_state.practice_tempo_saved
+    if "practice_tempo_precision" not in st.session_state:
+        fraction = str(float(st.session_state.practice_tempo_saved)).partition(".")[2].rstrip("0")
+        st.session_state.practice_tempo_precision = len(fraction)
+    for key, value in PRACTICE_SETTING_DEFAULTS.items():
+        saved_key = f"{key}_saved"
+        if saved_key not in st.session_state:
+            st.session_state[saved_key] = st.session_state.get(key, value)
+        if key not in st.session_state:
+            st.session_state[key] = st.session_state[saved_key]
+
+
+def save_practice_setting(key: str) -> None:
+    st.session_state[f"{key}_saved"] = st.session_state[key]
+    if key == "practice_tempo":
+        fraction = str(float(st.session_state.practice_tempo)).partition(".")[2].rstrip("0")
+        st.session_state.practice_tempo_precision = len(fraction)
+
+
+def save_player_tempo() -> None:
+    tempo = st.session_state["practice_player"].tempo
+    if (isinstance(tempo, bool) or not isinstance(tempo, (int, float))
+            or not math.isfinite(tempo) or not TEMPO_MIN <= tempo <= TEMPO_MAX):
+        raise ValueError("El reproductor envió un tempo no válido.")
+    st.session_state.practice_tempo = tempo
+    st.session_state.practice_tempo_saved = tempo
+    fraction = str(float(tempo)).partition(".")[2].rstrip("0")
+    st.session_state.practice_tempo_precision = len(fraction)
 
 
 def select_loop_measure(number: int) -> None:
@@ -170,10 +215,42 @@ def select_loop_measure(number: int) -> None:
 
 
 def change_tempo(offset: int) -> None:
-    tempo = st.session_state.practice_tempo + offset
-    if not 40 <= tempo <= 160:
+    tempo = float(Decimal(str(st.session_state.practice_tempo_saved)) + offset)
+    if not TEMPO_MIN <= tempo <= TEMPO_MAX:
         raise ValueError("El tempo debe estar entre 40 y 160 BPM.")
     st.session_state.practice_tempo = tempo
+    st.session_state.practice_tempo_saved = tempo
+
+
+def accept_score_tempo() -> None:
+    tempo = st.session_state.practice_tempo_choice
+    st.session_state.practice_tempo = tempo
+    st.session_state.practice_tempo_saved = tempo
+    st.session_state.practice_tempo_confirmed_source = SCORE_TEMPO
+
+
+def request_compatible_tempo() -> bool:
+    if TEMPO_MIN <= SCORE_TEMPO <= TEMPO_MAX:
+        st.session_state.pop("practice_tempo_confirmed_source", None)
+        return True
+    if st.session_state.get("practice_tempo_confirmed_source") == SCORE_TEMPO:
+        return True
+    st.warning(
+        f"La partitura indica {SCORE_TEMPO} BPM, fuera del intervalo "
+        f"{TEMPO_MIN}–{TEMPO_MAX} BPM. Elige un tempo para esta práctica; "
+        "la partitura no se modificará."
+    )
+    st.number_input(
+        "Tempo para esta práctica (BPM)", min_value=TEMPO_MIN, max_value=TEMPO_MAX,
+        value=TEMPO_DEFAULT, key="practice_tempo_choice",
+    )
+    st.button("Usar este tempo", key="confirm_score_tempo", on_click=accept_score_tempo)
+    return False
+
+
+def toggle_practice_screen() -> None:
+    current = st.session_state.practice_screen
+    st.session_state.practice_screen = "settings" if current == "practice" else "practice"
 
 
 def pitch_y(pitch: str) -> int:
@@ -341,9 +418,9 @@ def render_music() -> None:
                 help=f"Compás {number}" + (" · inicio A" if number == start else "")
                 + (" · fin B" if number == end else ""),
             )
-    if st.session_state.practice_visibility == "Todos":
+    if st.session_state.practice_visibility_saved == "Todos":
         first, last = 1, len(MEASURES)
-    elif st.session_state.practice_visibility == "Bucle y adyacentes":
+    elif st.session_state.practice_visibility_saved == "Bucle y adyacentes":
         first, last = max(1, start - 1), min(len(MEASURES), end + 1)
     else:
         first, last = start, end
@@ -366,7 +443,7 @@ def render_music() -> None:
         label = " · ".join(labels)
         classes = "selected" if selected else "context"
         tabs = ""
-        if st.session_state.practice_tabs:
+        if st.session_state.practice_tabs_saved:
             symbols = []
             for event, (position, duration) in zip(events, timing):
                 colour = "blow" if event.tab_value and event.blow else "draw" if event.tab_value else "rest"
@@ -387,57 +464,75 @@ def render_music() -> None:
                 f'width: {100 * width / STAFF_WIDTH:.6f}%"></span>'
                 for index, (event, (position, width)) in enumerate(zip(events, timing))
             ) + "</div>"
-            if st.session_state.practice_duration else f'<div class="measure-background" data-measure="{number}" data-selected="{str(selected).lower()}"></div>'
+            if st.session_state.practice_duration_saved else f'<div class="measure-background" data-measure="{number}" data-selected="{str(selected).lower()}"></div>'
         )
         headings.append(
             f'<div class="measure-heading measure-cell {classes}" data-measure="{number}" '
             f'id="practice-measure-{number}" aria-label="Compás {number}: {len(events)} eventos · {label}">'
-            f'<span>{number}</span><span>{label}</span></div>'
+            f'<span>{number}</span></div>'
         )
         if tabs:
             tablatures.append(tabs)
         backgrounds.append(background)
-    signature = score_signature(METER, start, st.session_state.practice_score)
-    notation = score(MEASURES, first, last) if st.session_state.practice_score else ""
+    signature = score_signature(METER, start, st.session_state.practice_score_saved)
+    notation = score(MEASURES, first, last) if st.session_state.practice_score_saved else ""
     st.html(
         f'<div class="practice-score-container" '
-        f'style="--measure-count: {last - first + 1}; '
-        f'--signature-width: 70px">'
-        f'{signature}<div class="practice-score" role="region" '
+        f'style="--measure-count: {last - first + 1}">'
+        f'<div class="practice-score" role="region" '
         f'aria-label="Música: desplazar horizontalmente" '
         f'tabindex="0">'
+        f'<div class="practice-viewport"><div class="practice-ribbon">{signature}'
         f'<div class="background-row" aria-hidden="true">{"".join(backgrounds)}</div>'
         f'<div class="practice-row heading-row" aria-label="Compases">{"".join(headings)}</div>'
         f'{notation}'
         f'<div class="practice-row tabs-row" aria-label="Tablatura">{"".join(tablatures)}</div>'
-        f'</div></div>'
+        f'</div></div></div></div>'
     )
     render_guide()
     render_transport()
 
 
 def render_transport() -> None:
+    tempo = float(st.session_state.practice_tempo_saved)
+    precision = st.session_state.practice_tempo_precision
+    st.session_state.practice_tempo = tempo
     with st.container(key="practice-transport"):
-        play, pause, stop, status, lower, value, higher, slider = st.columns(
-            [1, 1, 1, 1, 0.5, 0.8, 0.5, 2],
+        player, lower, value, higher, slider = st.columns(
+            [4, 0.5, 0.8, 0.5, 2],
             gap="small", vertical_alignment="center",
         )
-        play.button("▶ Play", type="primary", disabled=True, use_container_width=True)
-        pause.button("Ⅱ Pause", disabled=True, use_container_width=True)
-        stop.button("■ Stop", disabled=True, use_container_width=True)
-        status.caption("Audio pendiente")
+        start, end = st.session_state.practice_loop_bounds
+        player_data = {
+            "tempo": tempo,
+            "startMeasure": start,
+            "endMeasure": end,
+            "measureCount": len(MEASURES),
+            "meter": METER,
+            "measures": [
+                float(sum((event.beats for event in measure), Fraction()))
+                for measure in MEASURES
+            ],
+        }
+        with player:
+            render_player(player_data, on_tempo_change=save_player_tempo)
         lower.button(
             "−", key="tempo_down", on_click=change_tempo, args=(-1,),
-            disabled=st.session_state.practice_tempo == 40, help="Bajar 1 BPM",
+            disabled=tempo - 1 < TEMPO_MIN, help="Bajar 1 BPM",
             use_container_width=True,
         )
-        value.markdown(f"**{st.session_state.practice_tempo} BPM**")
+        value.markdown(f"**{int(tempo) if tempo.is_integer() else tempo} BPM**")
         higher.button(
             "＋", key="tempo_up", on_click=change_tempo, args=(1,),
-            disabled=st.session_state.practice_tempo == 160, help="Subir 1 BPM",
+            disabled=tempo + 1 > TEMPO_MAX, help="Subir 1 BPM",
             use_container_width=True,
         )
-        slider.slider("Tempo", 40, 160, key="practice_tempo", label_visibility="collapsed")
+        slider.slider(
+            "Tempo", float(TEMPO_MIN), float(TEMPO_MAX), step=10.0 ** -precision,
+            format=f"%.{precision}f",
+            key="practice_tempo", label_visibility="collapsed",
+            on_change=save_practice_setting, args=("practice_tempo",),
+        )
 
 
 def render_guide() -> None:
@@ -450,43 +545,109 @@ def render_guide() -> None:
 
 
 def render_settings() -> None:
-    with st.expander("Ajustes"):
-        display, sound, notice = st.columns(3)
+    for key in PRACTICE_SETTING_DEFAULTS:
+        st.session_state[key] = st.session_state[f"{key}_saved"]
+    with st.container(key="practice-settings-page"):
+        display, distribution = st.columns((1, 1.15), gap="large")
         with display:
             st.markdown("**Visualización**")
             st.radio(
                 "Compases en las cintas",
                 ("Todos", "Bucle y adyacentes", "Solo bucle"),
                 key="practice_visibility",
+                on_change=save_practice_setting,
+                args=("practice_visibility",),
             )
-            st.checkbox("Partitura", key="practice_score", disabled=not st.session_state.practice_tabs)
-            st.checkbox("Tablatura", key="practice_tabs", disabled=not st.session_state.practice_score)
-            st.checkbox("Fondos de duración", key="practice_duration")
-        with sound:
-            st.markdown("**Sonido · próximamente**")
-            st.toggle("Metrónomo", disabled=True)
-            st.slider("Volumen", 0, 100, 75, disabled=True)
-        with notice:
-            st.markdown("**Aviso · próximamente**")
-            st.number_input("Aviso (minutos)", min_value=1, value=15, disabled=True)
+            st.checkbox(
+                "Partitura", key="practice_score", disabled=not st.session_state.practice_tabs,
+                on_change=save_practice_setting, args=("practice_score",),
+            )
+            st.checkbox(
+                "Tablatura", key="practice_tabs", disabled=not st.session_state.practice_score,
+                on_change=save_practice_setting, args=("practice_tabs",),
+            )
+            st.checkbox(
+                "Fondos de duración", key="practice_duration",
+                on_change=save_practice_setting, args=("practice_duration",),
+            )
+        with distribution:
+            st.markdown("**Distribución del bloque de música**")
+            selector, guide, transport = st.columns(3)
+            selector.number_input(
+                "Selector (%)", min_value=10, max_value=25, key="practice_height_map",
+                on_change=save_practice_setting, args=("practice_height_map",),
+            )
+            guide.number_input(
+                "Guía (%)", min_value=10, max_value=25, key="practice_height_guide",
+                on_change=save_practice_setting, args=("practice_height_guide",),
+            )
+            transport.number_input(
+                "Controles (%)", min_value=10, max_value=25, key="practice_height_transport",
+                on_change=save_practice_setting, args=("practice_height_transport",),
+            )
+            notation_share = 100 - sum(st.session_state[f"{key}_saved"] for key in (
+                "practice_height_map", "practice_height_guide", "practice_height_transport",
+            ))
+            st.caption(f"Partitura / tablatura: {notation_share}% restante. Total: 100%.")
+        with st.expander("Sonido y avisos · próximamente"):
+            sound, notice = st.columns(2)
+            with sound:
+                st.toggle("Metrónomo", disabled=True)
+                st.slider("Volumen", 0, 100, 75, disabled=True)
+            with notice:
+                st.number_input("Aviso (minutos)", min_value=1, value=15, disabled=True)
+
+
+def render_header() -> None:
+    screen = st.session_state.practice_screen
+    if screen == "practice":
+        start, end = st.session_state.practice_loop_bounds
+        st.html(
+            '<header class="practice-header">'
+            f'<h3>{escape(TITLE)}</h3>'
+            f'<p>Armónica {escape(INSTRUMENT)} · {escape(METER)} · '
+            f'Bucle {start}–{end} · Repetición sin límite</p>'
+            '</header>'
+        )
+        label = "⚙ Ajustes"
+        next_screen = "settings"
+    else:
+        st.html('<header class="practice-header"><h3>Ajustes</h3></header>')
+        label = "← Volver"
+        next_screen = "practice"
+
+    st.button(
+        label,
+        key="practice_screen_toggle",
+        help="Abrir los ajustes" if next_screen == "settings" else "Volver a la práctica",
+        on_click=toggle_practice_screen,
+    )
 
 
 def render() -> None:
+    if not request_compatible_tempo():
+        return
     initialise_state()
     stylesheet = Path(__file__).resolve().parents[1] / "assets" / "practica.css"
-    st.html(f"<style>{stylesheet.read_text(encoding='utf-8')}</style>")
-    start, end = st.session_state.practice_loop_bounds
+    map_share = st.session_state.practice_height_map_saved
+    guide_share = st.session_state.practice_height_guide_saved
+    transport_share = st.session_state.practice_height_transport_saved
+    rows = (map_share, 100 - map_share - guide_share - transport_share, guide_share, transport_share)
+    row_css = " ".join(f"minmax(0, {share}fr)" for share in rows)
+    hidden_region = "settings" if st.session_state.practice_screen == "practice" else "music"
     st.html(
-        '<header class="practice-header">'
-        f'<h3>{escape(TITLE)}</h3>'
-        f'<p>Armónica {escape(INSTRUMENT)} · {escape(METER)} · '
-        f'Bucle {start}–{end} · Repetición sin límite</p>'
-        '</header>'
+        f"<style>{stylesheet.read_text(encoding='utf-8')}"
+        f".st-key-practice-music {{ --music-rows: {row_css}; }}"
+        f".st-key-practice-shell .st-key-practice-grid > div:has(> .st-key-practice-{hidden_region}) "
+        "{ display: none; }</style>"
     )
     render_layout(
-        key="practice", horizontal=PRACTICE_LAYOUT, vertical=PRACTICE_LAYOUT,
+        key="practice",
+        horizontal=PRACTICE_LAYOUT,
+        vertical=PRACTICE_LAYOUT,
         regions={"music": render_music, "settings": render_settings},
-        height="fluid",
+        header=render_header,
+        height="screen",
     )
 
 
