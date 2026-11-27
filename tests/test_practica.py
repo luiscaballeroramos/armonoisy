@@ -133,6 +133,24 @@ class PracticeTests(unittest.TestCase):
             self.assertAlmostEqual(tab, point, delta=0.1)
             self.assertAlmostEqual(start, point, delta=0.1)
             self.assertAlmostEqual(width, expected_width, delta=0.01)
+        cards = re.findall(r'<article class="measure .*?</article>', html, re.DOTALL)
+        single_bar = re.search(
+            r'<span class="" style="left: ([0-9.]+)%; width: ([0-9.]+)%"', cards[1]
+        )
+        assert single_bar is not None
+        self.assertAlmostEqual(float(single_bar.group(1)) * 3, 70, delta=0.01)
+        self.assertAlmostEqual(float(single_bar.group(2)) * 3, 210, delta=0.01)
+
+        with patch.object(Path, "read_text", read_text):
+            app.checkbox(key="practice_score").uncheck().run()
+        hidden_html = next(item.value for item in app.get("html") if 'class="practice-score"' in item.value)
+        hidden_card = re.search(r'<article class="measure .*?</article>', hidden_html, re.DOTALL)
+        assert hidden_card is not None
+        self.assertNotIn('class="staff-image"', hidden_card.group())
+        self.assertEqual(
+            re.findall(r'<span class="(?:blow|draw|rest)" style="left: ([0-9.]+)%"', hidden_card.group()),
+            [f"{value / 3:.6f}" for value in tabs],
+        )
 
     def test_tempo_buttons_follow_slider_and_limits(self) -> None:
         self.app.slider(key="practice_tempo").set_value(40).run()
