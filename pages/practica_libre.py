@@ -58,10 +58,12 @@ PRACTICE_SETTING_DEFAULTS = {
     "practice_score": True,
     "practice_tabs": True,
     "practice_duration": True,
-    "practice_visibility": "Todos",
+    "practice_visibility": "Solo bucle",
     "practice_height_map": 15,
     "practice_height_guide": 10,
     "practice_height_transport": 20,
+    "practice_metronome": True,
+    "practice_volume": 75,
 }
 
 
@@ -509,6 +511,8 @@ def render_transport() -> None:
             "endMeasure": end,
             "measureCount": len(MEASURES),
             "meter": METER,
+            "metronomeEnabled": st.session_state.practice_metronome_saved,
+            "volume": st.session_state.practice_volume_saved / 100,
             "measures": [
                 float(sum((event.beats for event in measure), Fraction()))
                 for measure in MEASURES
@@ -589,11 +593,17 @@ def render_settings() -> None:
                 "practice_height_map", "practice_height_guide", "practice_height_transport",
             ))
             st.caption(f"Partitura / tablatura: {notation_share}% restante. Total: 100%.")
-        with st.expander("Sonido y avisos · próximamente"):
+        with st.expander("Sonido y avisos"):
             sound, notice = st.columns(2)
             with sound:
-                st.toggle("Metrónomo", disabled=True)
-                st.slider("Volumen", 0, 100, 75, disabled=True)
+                st.toggle(
+                    "Metrónomo", key="practice_metronome",
+                    on_change=save_practice_setting, args=("practice_metronome",),
+                )
+                st.slider(
+                    "Volumen", 0, 100, key="practice_volume",
+                    on_change=save_practice_setting, args=("practice_volume",),
+                )
             with notice:
                 st.number_input("Aviso (minutos)", min_value=1, value=15, disabled=True)
 

@@ -59,9 +59,12 @@ requiere credenciales ni servicios externos para ejecutarse.
   el tempo mostrado se conserva hasta que se modifica. En 4/4, BPM cuenta negras.
 - Guia de armonica de frente con sus diez agujeros bajo la partitura; la
   indicacion de la nota actual esta pendiente de la reproduccion.
-- En los ajustes se elige si las cintas muestran toda la cancion, el bucle con
-  un compas adyacente a cada lado, o solo el bucle. En los limites solo se
-  incluye el contexto disponible.
+- Por defecto, las cintas muestran solo los compases del bucle seleccionado.
+  En los ajustes se puede mostrar toda la cancion o incluir un compas adyacente
+  a cada lado; en los limites solo se incluye el contexto disponible.
+- En Sonido y avisos se puede activar o silenciar el metronomo y regular el
+  volumen entre 0% y 100% (75% inicial). Silenciarlo no detiene el reloj ni el
+  seguimiento visual.
 - La cabecera tiene un boton para alternar entre la practica y una pantalla
   completa de ajustes. Volver conserva bucle, tempo, opciones y la posicion
   horizontal durante la sesion, dentro del recorrido disponible si cambia el
@@ -80,10 +83,10 @@ requiere credenciales ni servicios externos para ejecutarse.
   a lo ancho. La clave y el compas permanecen fijos al desplazar la partitura.
 - Estado durante la sesion de Streamlit, no guardado persistente en disco.
 
-Pendiente: silenciar y regular el volumen, cuenta de entrada, repetir el compas
-actual, pruebas cuantitativas de 100 vueltas del planificador y comprobacion
-auditiva en movil y ordenador. No se reproduce melodia guia ni acompanamiento.
-La aplicacion lee la partitura sin modificar el JSON original.
+Pendiente: cuenta de entrada, repetir el compas actual, pruebas cuantitativas
+de 100 vueltas del planificador y comprobacion auditiva en movil y ordenador.
+No se reproduce melodia guia ni acompanamiento. La aplicacion lee la partitura
+sin modificar el JSON original.
 
 ## Estructura minima
 

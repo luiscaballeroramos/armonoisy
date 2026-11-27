@@ -5,12 +5,21 @@ const CLICK_DURATION_SECONDS = 0.045;
 const START_DELAY_SECONDS = 0.05;
 
 function normalizedConfig(data) {
+  const volume = Number(data.volume);
+  if (!Number.isFinite(volume) || volume < 0 || volume > 1) {
+    throw new Error("El volumen debe estar entre 0 y 100%.");
+  }
+  if (typeof data.metronomeEnabled !== "boolean") {
+    throw new Error("El estado del metrónomo no es válido.");
+  }
   return {
     tempo: Number(data.tempo),
     startMeasure: Number(data.startMeasure),
     endMeasure: Number(data.endMeasure),
     measureCount: Number(data.measureCount),
     measures: data.measures.map((beats) => Number(beats)),
+    metronomeEnabled: data.metronomeEnabled,
+    volume,
     supported: data.meter === "4/4" && data.measures.every((beats) => Number(beats) === 4),
   };
 }
@@ -92,7 +101,16 @@ function createInstance(parentElement, data) {
   }
 
   function runningStatus() {
-    return pendingConfig ? `Próximo: ${pendingConfig.tempo} BPM` : "Reproduciendo";
+    if (pendingConfig) return `Próximo: ${pendingConfig.tempo} BPM`;
+    return requested.metronomeEnabled ? "Reproduciendo" : "Silenciado";
+  }
+
+  function updateMasterGain() {
+    if (!masterGain || !context) return;
+    const now = context.currentTime;
+    const volume = requested.metronomeEnabled ? requested.volume : 0;
+    masterGain.gain.cancelScheduledValues(now);
+    masterGain.gain.setTargetAtTime(volume, now, 0.015);
   }
 
   function cancelVoices(fromTime = 0) {
@@ -145,7 +163,7 @@ function createInstance(parentElement, data) {
         activeConfig = pendingConfig || requested;
         pendingConfig = null;
         beginCycle(nextPulseTime, activeConfig);
-        if (hasPendingConfig) setStatus("Reproduciendo");
+        if (hasPendingConfig) setStatus(runningStatus());
       }
       playClick(nextPulseTime, nextPulse % 4 === 0);
       nextPulseTime += 60 / cycle.config.tempo;
@@ -173,7 +191,7 @@ function createInstance(parentElement, data) {
     }
     context = new AudioContextConstructor();
     masterGain = context.createGain();
-    masterGain.gain.value = 0.8;
+    masterGain.gain.value = requested.metronomeEnabled ? requested.volume : 0;
     masterGain.connect(context.destination);
     context.addEventListener("statechange", () => {
       if (destroyed) return;
@@ -199,7 +217,7 @@ function createInstance(parentElement, data) {
     running = true;
     paused = false;
     pausedPosition = null;
-    setStatus("Reproduciendo");
+    setStatus(runningStatus());
     startScheduler();
   }
 
@@ -219,7 +237,7 @@ function createInstance(parentElement, data) {
     nextPulseTime = nextTime;
     running = true;
     paused = false;
-    setStatus("Reproduciendo");
+    setStatus(runningStatus());
     startScheduler();
   }
 
@@ -278,7 +296,10 @@ function createInstance(parentElement, data) {
     const changed = next.tempo !== requested.tempo
       || next.startMeasure !== requested.startMeasure
       || next.endMeasure !== requested.endMeasure;
+    const soundChanged = next.metronomeEnabled !== requested.metronomeEnabled
+      || next.volume !== requested.volume;
     requested = next;
+    if (soundChanged) updateMasterGain();
     if (running && changed) {
       if (cycle && cycle.startTime > context.currentTime) {
         cancelVoices(cycle.startTime);
@@ -300,6 +321,7 @@ function createInstance(parentElement, data) {
       activeConfig = next;
       setPosition(next.startMeasure, 1);
     }
+    if (running && soundChanged) setStatus(runningStatus());
     if (!requested.supported) {
       setStatus("Solo se admite 4/4 con cuatro negras por compás.");
     } else if (!running && !paused) {

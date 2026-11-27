@@ -24,6 +24,12 @@ def show_practice(app: AppTest) -> None:
         app.button(key="practice_screen_toggle").click().run()
 
 
+def show_all_measures(app: AppTest) -> None:
+    show_settings(app)
+    app.radio(key="practice_visibility").set_value("Todos").run()
+    show_practice(app)
+
+
 class PracticeTests(unittest.TestCase):
     def setUp(self) -> None:
         self.app = AppTest.from_file(str(APP), default_timeout=15).run()
@@ -32,6 +38,20 @@ class PracticeTests(unittest.TestCase):
     def set_loop(self, start: int, end: int) -> None:
         self.app.session_state["practice_loop_bounds"] = (start, end)
         self.app.run()
+
+    def test_only_selected_measures_are_visible_by_default(self) -> None:
+        html = next(item.value for item in self.app.get("html") if 'class="practice-score"' in item.value)
+        self.assertEqual(re.findall(r'id="practice-measure-(\d+)"', html), ["3", "4", "5"])
+        self.app.button(key="map_measure_2").click().run()
+        html = next(item.value for item in self.app.get("html") if 'class="practice-score"' in item.value)
+        self.assertEqual(re.findall(r'id="practice-measure-(\d+)"', html), ["2", "3", "4", "5"])
+        show_settings(self.app)
+        self.assertEqual(self.app.radio(key="practice_visibility").value, "Solo bucle")
+        self.app.radio(key="practice_visibility").set_value("Todos").run()
+        show_practice(self.app)
+        self.assertEqual(self.app.session_state["practice_visibility_saved"], "Todos")
+        html = next(item.value for item in self.app.get("html") if 'class="practice-score"' in item.value)
+        self.assertEqual(len(re.findall(r'id="practice-measure-(\d+)"', html)), 25)
 
     def test_screen_layout_preserves_frame_when_notation_is_hidden(self) -> None:
         layout_css = next(
@@ -147,6 +167,7 @@ class PracticeTests(unittest.TestCase):
         self.assertEqual(len(app.exception), 0)
 
     def test_selected_score_is_loaded_and_rendered(self) -> None:
+        show_all_measures(self.app)
         data = json.loads(SCORE.read_text(encoding="utf-8"))
         header = next(item.value for item in self.app.get("html") if 'class="practice-header"' in item.value)
         self.assertIn(f'<h3>{data["title"]}</h3>', header)
@@ -206,6 +227,7 @@ class PracticeTests(unittest.TestCase):
 
         with patch.object(Path, "read_text", read_text):
             app = AppTest.from_file(str(APP), default_timeout=15).run()
+            show_all_measures(app)
         self.assertEqual(len(app.exception), 0)
         html = next(item.value for item in app.get("html") if 'class="practice-score"' in item.value)
         tab_cell = re.search(r'<div class="tabs measure-cell [^"]+" data-measure="1".*?</div>', html, re.DOTALL)
@@ -293,6 +315,7 @@ class PracticeTests(unittest.TestCase):
 
         with patch.object(Path, "read_text", read_text):
             app = AppTest.from_file(str(APP), default_timeout=15).run()
+            show_all_measures(app)
         self.assertEqual(len(app.exception), 0)
         html = next(item.value for item in app.get("html") if 'class="practice-score"' in item.value)
         image = re.search(r'<img class="staff-image" src="data:image/svg\+xml;base64,([^"]+)', html)
@@ -360,6 +383,7 @@ class PracticeTests(unittest.TestCase):
             self.assertAlmostEqual(previous[0] + previous[1], following[0], delta=0.01)
 
     def test_measure_columns_are_shared_by_all_rows(self) -> None:
+        show_all_measures(self.app)
         html = next(item.value for item in self.app.get("html") if 'class="practice-score"' in item.value)
         for row in ("heading-row", "tabs-row"):
             self.assertIn(f'practice-row {row}', html)
@@ -382,6 +406,7 @@ class PracticeTests(unittest.TestCase):
 
     def test_duration_background_can_be_hidden_without_losing_divisions(self) -> None:
         show_settings(self.app)
+        self.app.radio(key="practice_visibility").set_value("Todos").run()
         self.app.checkbox(key="practice_duration").uncheck().run()
         show_practice(self.app)
         html = next(item.value for item in self.app.get("html") if 'class="practice-score"' in item.value)
@@ -411,6 +436,7 @@ class PracticeTests(unittest.TestCase):
 
         with patch.object(Path, "read_text", read_text):
             app = AppTest.from_file(str(APP), default_timeout=15).run()
+            show_all_measures(app)
         self.assertEqual(len(app.exception), 0)
         html = next(item.value for item in app.get("html") if 'class="practice-score"' in item.value)
         image = re.search(r'<img class="staff-image" src="data:image/svg\+xml;base64,([^"]+)', html)
@@ -427,6 +453,7 @@ class PracticeTests(unittest.TestCase):
         self.assertIn("ligadura", invalid.error[0].value.lower())
 
     def test_all_score_ties_are_rendered_once(self) -> None:
+        show_all_measures(self.app)
         data = json.loads(SCORE.read_text(encoding="utf-8"))
         expected = sum(event.get("tie") == "start" for measure in data["measures"] for event in measure["events"])
         html = next(item.value for item in self.app.get("html") if 'class="practice-score"' in item.value)
@@ -456,6 +483,7 @@ class PracticeTests(unittest.TestCase):
 
         with patch.object(Path, "read_text", read_text):
             app = AppTest.from_file(str(APP), default_timeout=15).run()
+            show_all_measures(app)
         self.assertEqual(len(app.exception), 0)
         html = next(item.value for item in app.get("html") if 'class="practice-score"' in item.value)
         self.assertEqual(re.findall(r'--notation-width: (\d+)', html), ["512", "300"])
@@ -582,6 +610,20 @@ class PracticeTests(unittest.TestCase):
         self.assertEqual(columns[4].slider[0].key, "practice_tempo")
         self.assertEqual(len(self.app.exception), 0)
 
+    def test_metronome_and_volume_settings_are_saved(self) -> None:
+        show_settings(self.app)
+        self.assertTrue(self.app.toggle(key="practice_metronome").value)
+        self.assertEqual(self.app.slider(key="practice_volume").value, 75)
+        self.app.toggle(key="practice_metronome").set_value(False).run()
+        self.app.slider(key="practice_volume").set_value(42).run()
+        self.assertFalse(self.app.session_state["practice_metronome_saved"])
+        self.assertEqual(self.app.session_state["practice_volume_saved"], 42)
+        show_practice(self.app)
+        show_settings(self.app)
+        self.assertFalse(self.app.toggle(key="practice_metronome").value)
+        self.assertEqual(self.app.slider(key="practice_volume").value, 42)
+        self.assertEqual(len(self.app.exception), 0)
+
     def test_collapsing_settings_preserves_values(self) -> None:
         self.set_loop(1, 2)
         show_settings(self.app)
@@ -589,7 +631,7 @@ class PracticeTests(unittest.TestCase):
         self.app.button(key="practice_screen_toggle").click().run()
         self.app.slider(key="practice_tempo").set_value(88).run()
         show_settings(self.app)
-        self.assertTrue(any(item.label == "Sonido y avisos · próximamente" for item in self.app.expander))
+        self.assertTrue(any(item.label == "Sonido y avisos" for item in self.app.expander))
         show_practice(self.app)
         self.assertEqual(self.app.session_state["practice_loop_bounds"], (1, 2))
         show_settings(self.app)
@@ -609,7 +651,7 @@ class PracticeTests(unittest.TestCase):
         show_settings(self.app)
         self.assertEqual([radio.label for radio in self.app.radio], ["Compases en las cintas"])
         self.assertTrue(any(button.label == "← Volver" for button in self.app.button))
-        self.assertTrue(any(expander.label == "Sonido y avisos · próximamente" for expander in self.app.expander))
+        self.assertTrue(any(expander.label == "Sonido y avisos" for expander in self.app.expander))
         show_practice(self.app)
         self.assertEqual(len(self.app.get("popover")), 0)
         visible_text = "\n".join(item.value for item in self.app.caption)
@@ -641,6 +683,7 @@ class PracticeTests(unittest.TestCase):
         self.assertEqual(len(self.app.exception), 0)
 
     def test_context_measure_marking_tracks_loop(self) -> None:
+        show_all_measures(self.app)
         self.set_loop(3, 5)
         html = next(item.value for item in self.app.get("html") if 'class="practice-score"' in item.value)
         self.assertIn('data-measure="2" data-selected="false"', html)
@@ -652,6 +695,7 @@ class PracticeTests(unittest.TestCase):
         self.assertNotRegex(html, r'class="tabs measure-cell context" data-measure="2"')
 
     def test_measure_headings_show_only_numbers(self) -> None:
+        show_all_measures(self.app)
         for bounds in ((3, 5), (4, 4)):
             with self.subTest(bounds=bounds):
                 self.set_loop(*bounds)
